@@ -10,7 +10,6 @@ Build-Depends:
  libdrm-dev (>= 2.4.63) [!hurd-i386],
  libgl1-mesa-dev | libgl-dev,
  libgbm-dev,
- libpciaccess-dev,
  libudev-dev [linux-any],
  pkg-config,
  x11proto-core-dev,

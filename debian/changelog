@@ -4,6 +4,7 @@ xserver-xorg-video-amdgpu (1.0.0-1) UNRELEASED; urgency=medium
   * Let uscan verify tarball signatures.
   * Replace non-existing Suggests: linux-firmware with new firmware-amd-
     graphics.
+  * Remove unused libpciaccess-dev build-dep.
 
  -- Andreas Boll <andreas.boll.dev@gmail.com>  Thu, 19 Nov 2015 12:08:49 +0100
 
