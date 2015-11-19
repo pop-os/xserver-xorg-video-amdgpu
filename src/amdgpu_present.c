@@ -50,6 +50,7 @@
 
 struct amdgpu_present_vblank_event {
 	uint64_t event_id;
+	xf86CrtcPtr crtc;
 };
 
 static uint32_t crtc_select(int crtc_id)
@@ -86,7 +87,13 @@ amdgpu_present_get_crtc(WindowPtr window)
 static int
 amdgpu_present_get_ust_msc(RRCrtcPtr crtc, CARD64 *ust, CARD64 *msc)
 {
-	return drmmode_crtc_get_ust_msc(crtc->devPrivate, ust, msc);
+	xf86CrtcPtr xf86_crtc = crtc->devPrivate;
+	drmmode_crtc_private_ptr drmmode_crtc = xf86_crtc->driver_private;
+
+	if (drmmode_crtc->dpms_mode != DPMSModeOn)
+		return BadAlloc;
+
+	return drmmode_crtc_get_ust_msc(xf86_crtc, ust, msc);
 }
 
 /*
@@ -97,10 +104,11 @@ static Bool
 amdgpu_present_flush_drm_events(ScreenPtr screen)
 {
 	ScrnInfoPtr scrn = xf86ScreenToScrn(screen);
+	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(scrn);
 	xf86CrtcConfigPtr xf86_config = XF86_CRTC_CONFIG_PTR(scrn);
 	drmmode_crtc_private_ptr drmmode_crtc = xf86_config->crtc[0]->driver_private;
 	drmmode_ptr drmmode = drmmode_crtc->drmmode;
-	struct pollfd p = { .fd = drmmode->fd, .events = POLLIN };
+	struct pollfd p = { .fd = pAMDGPUEnt->fd, .events = POLLIN };
 	int r;
 
 	do {
@@ -110,7 +118,7 @@ amdgpu_present_flush_drm_events(ScreenPtr screen)
 	if (r <= 0)
 		return 0;
 
-	return drmHandleEvent(drmmode->fd, &drmmode->event_context) >= 0;
+	return drmHandleEvent(pAMDGPUEnt->fd, &drmmode->event_context) >= 0;
 }
 
 /*
@@ -147,7 +155,7 @@ amdgpu_present_queue_vblank(RRCrtcPtr crtc, uint64_t event_id, uint64_t msc)
 	xf86CrtcPtr xf86_crtc = crtc->devPrivate;
 	ScreenPtr screen = crtc->pScreen;
 	ScrnInfoPtr scrn = xf86ScreenToScrn(screen);
-	AMDGPUInfoPtr info = AMDGPUPTR(scrn);
+	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(scrn);
 	int crtc_id = drmmode_get_crtc_id(xf86_crtc);
 	struct amdgpu_present_vblank_event *event;
 	struct amdgpu_drm_queue_entry *queue;
@@ -171,7 +179,7 @@ amdgpu_present_queue_vblank(RRCrtcPtr crtc, uint64_t event_id, uint64_t msc)
 	vbl.request.sequence = msc;
 	vbl.request.signal = (unsigned long)queue;
 	for (;;) {
-		ret = drmWaitVBlank(info->dri2.drm_fd, &vbl);
+		ret = drmWaitVBlank(pAMDGPUEnt->fd, &vbl);
 		if (!ret)
 			break;
 		if (errno != EBUSY || !amdgpu_present_flush_drm_events(screen)) {
@@ -212,6 +220,9 @@ amdgpu_present_check_flip(RRCrtcPtr crtc, WindowPtr window, PixmapPtr pixmap,
 	ScreenPtr screen = window->drawable.pScreen;
 	ScrnInfoPtr scrn = xf86ScreenToScrn(screen);
 	AMDGPUInfoPtr info = AMDGPUPTR(scrn);
+	xf86CrtcConfigPtr config = XF86_CRTC_CONFIG_PTR(scrn);
+	int num_crtcs_on;
+	int i;
 
 	if (!scrn->vtSema)
 		return FALSE;
@@ -222,17 +233,23 @@ amdgpu_present_check_flip(RRCrtcPtr crtc, WindowPtr window, PixmapPtr pixmap,
 	if (!sync_flip)
 		return FALSE;
 
-	if (crtc) {
-		xf86CrtcPtr xf86_crtc = crtc->devPrivate;
-		drmmode_crtc_private_ptr drmmode_crtc = xf86_crtc->driver_private;
+	if (info->drmmode.dri2_flipping)
+		return FALSE;
 
-		if (!drmmode_crtc ||
-		    drmmode_crtc->rotate.bo != NULL ||
-		    drmmode_crtc->dpms_mode != DPMSModeOn)
+	for (i = 0, num_crtcs_on = 0; i < config->num_crtc; i++) {
+		drmmode_crtc_private_ptr drmmode_crtc = config->crtc[i]->driver_private;
+
+		if (!config->crtc[i]->enabled)
+			continue;
+
+		if (!drmmode_crtc || drmmode_crtc->rotate.bo != NULL)
 			return FALSE;
+
+		if (drmmode_crtc->dpms_mode == DPMSModeOn)
+			num_crtcs_on++;
 	}
 
-	return TRUE;
+	return num_crtcs_on > 0;
 }
 
 /*
@@ -242,7 +259,11 @@ amdgpu_present_check_flip(RRCrtcPtr crtc, WindowPtr window, PixmapPtr pixmap,
 static void
 amdgpu_present_flip_event(ScrnInfoPtr scrn, uint32_t msc, uint64_t ust, void *pageflip_data)
 {
+	AMDGPUInfoPtr info = AMDGPUPTR(scrn);
 	struct amdgpu_present_vblank_event *event = pageflip_data;
+
+	if (!event->crtc)
+		info->drmmode.present_flipping = FALSE;
 
 	present_event_notify(event->event_id, ust, msc);
 	free(event);
@@ -269,6 +290,7 @@ amdgpu_present_flip(RRCrtcPtr crtc, uint64_t event_id, uint64_t target_msc,
 {
 	ScreenPtr screen = crtc->pScreen;
 	ScrnInfoPtr scrn = xf86ScreenToScrn(screen);
+	AMDGPUInfoPtr info = AMDGPUPTR(scrn);
 	struct amdgpu_present_vblank_event *event;
 	xf86CrtcPtr xf86_crtc = crtc->devPrivate;
 	int crtc_id = xf86_crtc ? drmmode_get_crtc_id(xf86_crtc) : -1;
@@ -287,6 +309,7 @@ amdgpu_present_flip(RRCrtcPtr crtc, uint64_t event_id, uint64_t target_msc,
 		return FALSE;
 
 	event->event_id = event_id;
+	event->crtc = xf86_crtc;
 
 	ret = amdgpu_do_pageflip(scrn, AMDGPU_DRM_QUEUE_CLIENT_DEFAULT, bo,
 				 event_id, event, crtc_id,
@@ -294,6 +317,8 @@ amdgpu_present_flip(RRCrtcPtr crtc, uint64_t event_id, uint64_t target_msc,
 				 amdgpu_present_flip_abort);
 	if (!ret)
 		xf86DrvMsg(scrn->scrnIndex, X_ERROR, "present flip failed\n");
+	else
+		info->drmmode.present_flipping = TRUE;
 
 	return ret;
 }
@@ -305,29 +330,52 @@ static void
 amdgpu_present_unflip(ScreenPtr screen, uint64_t event_id)
 {
 	ScrnInfoPtr scrn = xf86ScreenToScrn(screen);
+	AMDGPUInfoPtr info = AMDGPUPTR(scrn);
+	xf86CrtcConfigPtr config = XF86_CRTC_CONFIG_PTR(scrn);
 	struct amdgpu_present_vblank_event *event;
 	PixmapPtr pixmap = screen->GetScreenPixmap(screen);
 	struct amdgpu_buffer *bo;
-	Bool ret;
+	int i;
 
 	if (!amdgpu_present_check_flip(NULL, screen->root, pixmap, TRUE))
-		return;
+		goto modeset;
 
 	bo = amdgpu_get_pixmap_bo(pixmap);
-	if (!bo)
-		return;
+	if (!bo) {
+		ErrorF("%s: amdgpu_get_pixmap_bo failed, display might freeze\n", __func__);
+		goto modeset;
+	}
 
 	event = calloc(1, sizeof(struct amdgpu_present_vblank_event));
-	if (!event)
-		return;
+	if (!event) {
+		ErrorF("%s: calloc failed, display might freeze\n", __func__);
+		goto modeset;
+	}
 
 	event->event_id = event_id;
 
-	ret = amdgpu_do_pageflip(scrn, AMDGPU_DRM_QUEUE_CLIENT_DEFAULT, bo,
-				 event_id, event, -1, amdgpu_present_flip_event,
-				 amdgpu_present_flip_abort);
-	if (!ret)
-		xf86DrvMsg(scrn->scrnIndex, X_ERROR, "present unflip failed\n");
+	if (amdgpu_do_pageflip(scrn, AMDGPU_DRM_QUEUE_CLIENT_DEFAULT, bo,
+			       event_id, event, -1, amdgpu_present_flip_event,
+			       amdgpu_present_flip_abort))
+		return;
+
+modeset:
+	for (i = 0; i < config->num_crtc; i++) {
+		xf86CrtcPtr crtc = config->crtc[i];
+		drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
+
+		if (!crtc->enabled)
+			continue;
+
+		if (drmmode_crtc->dpms_mode == DPMSModeOn)
+			crtc->funcs->set_mode_major(crtc, &crtc->mode, crtc->rotation,
+						    crtc->x, crtc->y);
+		else
+			drmmode_crtc->need_modeset = TRUE;
+	}
+
+	present_event_notify(event_id, 0, 0);
+	info->drmmode.present_flipping = FALSE;
 }
 
 static present_screen_info_rec amdgpu_present_screen_info = {
@@ -350,11 +398,11 @@ amdgpu_present_has_async_flip(ScreenPtr screen)
 {
 #ifdef DRM_CAP_ASYNC_PAGE_FLIP
 	ScrnInfoPtr scrn = xf86ScreenToScrn(screen);
-	AMDGPUInfoPtr info = AMDGPUPTR(scrn);
+	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(scrn);
 	int ret;
 	uint64_t value;
 
-	ret = drmGetCap(info->dri2.drm_fd, DRM_CAP_ASYNC_PAGE_FLIP, &value);
+	ret = drmGetCap(pAMDGPUEnt->fd, DRM_CAP_ASYNC_PAGE_FLIP, &value);
 	if (ret == 0)
 		return value == 1;
 #endif

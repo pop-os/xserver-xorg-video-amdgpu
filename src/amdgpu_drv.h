@@ -133,7 +133,7 @@ struct _SyncFence;
 #endif
 
 typedef enum {
-	OPTION_NOACCEL,
+	OPTION_ACCEL,
 	OPTION_SW_CURSOR,
 	OPTION_PAGE_FLIP,
 #ifdef RENDER
@@ -145,6 +145,7 @@ typedef enum {
 	OPTION_DRI,
 	OPTION_SHADOW_PRIMARY,
 	OPTION_TEAR_FREE,
+	OPTION_DELETE_DP12,
 } AMDGPUOpts;
 
 #define AMDGPU_VSYNC_TIMEOUT	20000	/* Maximum wait for VSYNC (in usecs) */
@@ -222,7 +223,6 @@ typedef struct {
 #endif
 
 	Bool IsSecondary;
-	Bool IsPrimary;
 
 	Bool shadow_fb;
 	void *fb_shadow;

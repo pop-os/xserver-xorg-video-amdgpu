@@ -23,7 +23,7 @@
 # Initialize Autoconf
 AC_PREREQ([2.60])
 AC_INIT([xf86-video-amdgpu],
-        [0.0.01],
+        [1.0.0],
         [https://bugs.freedesktop.org/enter_bug.cgi?product=xorg],
         [xf86-video-amdgpu])
 
@@ -185,9 +185,6 @@ AC_CHECK_HEADERS([dri3.h], [], [],
 		 #include <xorg-server.h>])
 
 CPPFLAGS="$SAVE_CPPFLAGS"
-
-PKG_CHECK_MODULES([PCIACCESS], [pciaccess >= 0.8.0])
-XORG_CFLAGS="$XORG_CFLAGS $PCIACCESS_CFLAGS"
 
 # Checks for headers/macros for byte swapping
 # Known variants:

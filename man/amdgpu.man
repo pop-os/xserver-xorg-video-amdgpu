@@ -44,12 +44,11 @@ are supported:
 Selects software cursor.  The default is
 .B off.
 .TP
-.BI "Option \*qNoAccel\*q \*q" boolean \*q
+.BI "Option \*qAccel\*q \*q" boolean \*q
 Enables or disables all hardware acceleration.
 .br
-The default is to
-.B enable
-hardware acceleration.
+The default is
+.B on.
 
 .TP
 .BI "Option \*qZaphodHeads\*q \*q" string \*q
@@ -70,6 +69,13 @@ The default is
 .BI "Option \*qEnablePageFlip\*q \*q" boolean \*q
 Enable DRI2 page flipping.  The default is
 .B on.
+.TP
+.BI "Option \*qTearFree\*q \*q" boolean \*q
+Enable tearing prevention using the hardware page flipping mechanism. This
+option currently doesn't have any effect for rotated CRTCs. It requires
+allocating two separate scanout buffers for each non-rotated CRTC. Enabling
+this option currently disables Option \*qEnablePageFlip\*q. The default is
+.B off.
 .TP
 .BI "Option \*qAccelMethod\*q \*q" string \*q
 Setting this option to

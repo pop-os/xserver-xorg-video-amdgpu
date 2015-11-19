@@ -60,7 +60,7 @@ extern SymTabRec AMDGPUChipsets[];
 static Bool amdgpu_setup_kernel_mem(ScreenPtr pScreen);
 
 const OptionInfoRec AMDGPUOptions_KMS[] = {
-	{OPTION_NOACCEL, "NoAccel", OPTV_BOOLEAN, {0}, FALSE},
+	{OPTION_ACCEL, "Accel", OPTV_BOOLEAN, {0}, FALSE},
 	{OPTION_SW_CURSOR, "SWcursor", OPTV_BOOLEAN, {0}, FALSE},
 	{OPTION_PAGE_FLIP, "EnablePageFlip", OPTV_BOOLEAN, {0}, FALSE},
 	{OPTION_SUBPIXEL_ORDER, "SubPixelOrder", OPTV_ANYSTR, {0}, FALSE},
@@ -70,6 +70,7 @@ const OptionInfoRec AMDGPUOptions_KMS[] = {
 	{OPTION_DRI, "DRI", OPTV_INTEGER, {0}, FALSE},
 	{OPTION_SHADOW_PRIMARY, "ShadowPrimary", OPTV_BOOLEAN, {0}, FALSE},
 	{OPTION_TEAR_FREE, "TearFree", OPTV_BOOLEAN, {0}, FALSE},
+	{OPTION_DELETE_DP12, "DeleteUnusedDP12Displays", OPTV_BOOLEAN, {0}, FALSE},
 	{-1, NULL, OPTV_NONE, {0}, FALSE}
 };
 
@@ -106,17 +107,21 @@ static Bool AMDGPUGetRec(ScrnInfoPtr pScrn)
 /* Free our private AMDGPUInfoRec */
 static void AMDGPUFreeRec(ScrnInfoPtr pScrn)
 {
+	DevUnion *pPriv;
+	AMDGPUEntPtr pAMDGPUEnt;
 	AMDGPUInfoPtr info;
 
-	if (!pScrn || !pScrn->driverPrivate)
+	if (!pScrn)
 		return;
 
 	info = AMDGPUPTR(pScrn);
-
-	if (info->fbcon_pixmap)
+	if (info && info->fbcon_pixmap)
 		pScrn->pScreen->DestroyPixmap(info->fbcon_pixmap);
 
-	if (info->dri2.drm_fd > 0) {
+	pPriv = xf86GetEntityPrivate(xf86GetEntityInfo(pScrn->entityList[pScrn->numEntities - 1])->index,
+				     gAMDGPUEntityIndex);
+	pAMDGPUEnt = pPriv->ptr;
+	if (pAMDGPUEnt->fd > 0) {
 		DevUnion *pPriv;
 		AMDGPUEntPtr pAMDGPUEnt;
 		pPriv = xf86GetEntityPrivate(pScrn->entityList[0],
@@ -126,7 +131,11 @@ static void AMDGPUFreeRec(ScrnInfoPtr pScrn)
 		pAMDGPUEnt->fd_ref--;
 		if (!pAMDGPUEnt->fd_ref) {
 			amdgpu_device_deinitialize(pAMDGPUEnt->pDev);
-			drmClose(pAMDGPUEnt->fd);
+#ifdef XF86_PDEV_SERVER_FD
+			if (!(pAMDGPUEnt->platform_dev &&
+			      pAMDGPUEnt->platform_dev->flags & XF86_PDEV_SERVER_FD))
+#endif
+				drmClose(pAMDGPUEnt->fd);
 			pAMDGPUEnt->fd = 0;
 		}
 	}
@@ -148,6 +157,12 @@ static void *amdgpuShadowWindow(ScreenPtr screen, CARD32 row, CARD32 offset,
 	return ((uint8_t *) info->front_buffer->cpu_ptr + row * stride + offset);
 }
 
+static void
+amdgpuUpdatePacked(ScreenPtr pScreen, shadowBufPtr pBuf)
+{
+	shadowUpdatePacked(pScreen, pBuf);
+}
+
 static Bool AMDGPUCreateScreenResources_KMS(ScreenPtr pScreen)
 {
 	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
@@ -159,7 +174,7 @@ static Bool AMDGPUCreateScreenResources_KMS(ScreenPtr pScreen)
 		return FALSE;
 	pScreen->CreateScreenResources = AMDGPUCreateScreenResources_KMS;
 
-	if (!drmmode_set_desired_modes(pScrn, &info->drmmode, FALSE))
+	if (!drmmode_set_desired_modes(pScrn, &info->drmmode, pScrn->is_gpu))
 		return FALSE;
 
 	drmmode_uevent_init(pScrn, &info->drmmode);
@@ -167,7 +182,7 @@ static Bool AMDGPUCreateScreenResources_KMS(ScreenPtr pScreen)
 	if (info->shadow_fb) {
 		pixmap = pScreen->GetScreenPixmap(pScreen);
 
-		if (!shadowAdd(pScreen, pixmap, shadowUpdatePackedWeak(),
+		if (!shadowAdd(pScreen, pixmap, amdgpuUpdatePacked,
 			       amdgpuShadowWindow, 0, NULL))
 			return FALSE;
 	}
@@ -242,7 +257,8 @@ amdgpu_scanout_do_update(xf86CrtcPtr xf86_crtc, int scanout_id)
 	GCPtr gc;
 	BoxRec extents;
 
-	if (drmmode_crtc->dpms_mode != DPMSModeOn ||
+	if (!xf86_crtc->enabled ||
+	    drmmode_crtc->dpms_mode != DPMSModeOn ||
 	    !drmmode_crtc->scanout[scanout_id].pixmap)
 		return FALSE;
 
@@ -301,13 +317,15 @@ amdgpu_scanout_update(xf86CrtcPtr xf86_crtc)
 	drmmode_crtc_private_ptr drmmode_crtc = xf86_crtc->driver_private;
 	struct amdgpu_drm_queue_entry *drm_queue_entry;
 	ScrnInfoPtr scrn;
+	AMDGPUEntPtr pAMDGPUEnt;
 	drmVBlank vbl;
 	DamagePtr pDamage;
 	RegionPtr pRegion;
 	DrawablePtr pDraw;
 	BoxRec extents;
 
-	if (drmmode_crtc->scanout_update_pending ||
+	if (!xf86_crtc->enabled ||
+	    drmmode_crtc->scanout_update_pending ||
 	    !drmmode_crtc->scanout[0].pixmap ||
 	    drmmode_crtc->dpms_mode != DPMSModeOn)
 		return;
@@ -338,11 +356,12 @@ amdgpu_scanout_update(xf86CrtcPtr xf86_crtc)
 		return;
 	}
 
+	pAMDGPUEnt = AMDGPUEntPriv(scrn);
 	vbl.request.type = DRM_VBLANK_RELATIVE | DRM_VBLANK_EVENT;
 	vbl.request.type |= amdgpu_populate_vbl_request_type(xf86_crtc);
 	vbl.request.sequence = 1;
 	vbl.request.signal = (unsigned long)drm_queue_entry;
-	if (drmWaitVBlank(AMDGPUPTR(scrn)->dri2.drm_fd, &vbl)) {
+	if (drmWaitVBlank(pAMDGPUEnt->fd, &vbl)) {
 		xf86DrvMsg(scrn->scrnIndex, X_WARNING,
 			   "drmWaitVBlank failed for scanout update: %s\n",
 			   strerror(errno));
@@ -373,6 +392,7 @@ amdgpu_scanout_flip(ScreenPtr pScreen, AMDGPUInfoPtr info,
 {
 	drmmode_crtc_private_ptr drmmode_crtc = xf86_crtc->driver_private;
 	ScrnInfoPtr scrn;
+	AMDGPUEntPtr pAMDGPUEnt;
 	struct amdgpu_drm_queue_entry *drm_queue_entry;
 	unsigned scanout_id;
 
@@ -395,7 +415,8 @@ amdgpu_scanout_flip(ScreenPtr pScreen, AMDGPUInfoPtr info,
 		return;
 	}
 
-	if (drmModePageFlip(drmmode_crtc->drmmode->fd, drmmode_crtc->mode_crtc->crtc_id,
+	pAMDGPUEnt = AMDGPUEntPriv(scrn);
+	if (drmModePageFlip(pAMDGPUEnt->fd, drmmode_crtc->mode_crtc->crtc_id,
 			    drmmode_crtc->scanout[scanout_id].fb_id,
 			    DRM_MODE_PAGE_FLIP_EVENT, drm_queue_entry)) {
 		xf86DrvMsg(scrn->scrnIndex, X_WARNING, "flip queue failed in %s: %s\n",
@@ -543,7 +564,8 @@ static Bool AMDGPUPreInitAccel_KMS(ScrnInfoPtr pScrn)
 {
 	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
 
-	if (!xf86ReturnOptValBool(info->Options, OPTION_NOACCEL, false)) {
+	if (xf86ReturnOptValBool(info->Options, OPTION_ACCEL, TRUE)) {
+		AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(pScrn);
 		Bool use_glamor = TRUE;
 #ifdef HAVE_GBM_BO_USE_LINEAR
 		const char *accel_method;
@@ -558,7 +580,7 @@ static Bool AMDGPUPreInitAccel_KMS(ScrnInfoPtr pScrn)
 #endif
 
 		if (info->dri2.available)
-			info->gbm = gbm_create_device(info->dri2.drm_fd);
+			info->gbm = gbm_create_device(pAMDGPUEnt->fd);
 		if (info->gbm == NULL)
 			info->dri2.available = FALSE;
 
@@ -614,16 +636,6 @@ static Bool AMDGPUPreInitChipType_KMS(ScrnInfoPtr pScrn)
 	return TRUE;
 }
 
-static void amdgpu_reference_drm_fd(ScrnInfoPtr pScrn)
-{
-	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
-	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(pScrn);
-
-	info->dri2.drm_fd = pAMDGPUEnt->fd;
-	pAMDGPUEnt->fd_ref++;
-	info->drmmode.fd = info->dri2.drm_fd;
-}
-
 static Bool amdgpu_get_tile_config(ScrnInfoPtr pScrn)
 {
 	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
@@ -651,21 +663,25 @@ static Bool amdgpu_get_tile_config(ScrnInfoPtr pScrn)
 static void AMDGPUSetupCapabilities(ScrnInfoPtr pScrn)
 {
 #ifdef AMDGPU_PIXMAP_SHARING
-	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
+	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(pScrn);
 	uint64_t value;
 	int ret;
 
 	pScrn->capabilities = 0;
-	ret = drmGetCap(info->dri2.drm_fd, DRM_CAP_PRIME, &value);
+	ret = drmGetCap(pAMDGPUEnt->fd, DRM_CAP_PRIME, &value);
 	if (ret == 0) {
-		if (value & DRM_PRIME_CAP_EXPORT)
-			pScrn->capabilities |=
-			    RR_Capability_SourceOutput |
-			    RR_Capability_SinkOffload;
-		if (value & DRM_PRIME_CAP_IMPORT)
-			pScrn->capabilities |=
-			    RR_Capability_SourceOffload |
-			    RR_Capability_SinkOutput;
+		AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
+
+		if (value & DRM_PRIME_CAP_EXPORT) {
+			pScrn->capabilities |= RR_Capability_SourceOutput;
+			if (info->use_glamor && info->dri2.available)
+				pScrn->capabilities |= RR_Capability_SinkOffload;
+		}
+		if (value & DRM_PRIME_CAP_IMPORT) {
+			pScrn->capabilities |= RR_Capability_SinkOutput;
+			if (info->use_glamor && info->dri2.available)
+				pScrn->capabilities |= RR_Capability_SourceOffload;
+		}
 	}
 #endif
 }
@@ -720,7 +736,6 @@ Bool AMDGPUPreInit_KMS(ScrnInfoPtr pScrn, int flags)
 
 	info = AMDGPUPTR(pScrn);
 	info->IsSecondary = FALSE;
-	info->IsPrimary = FALSE;
 	info->pEnt =
 	    xf86GetEntityInfo(pScrn->entityList[pScrn->numEntities - 1]);
 	if (info->pEnt->location.type != BUS_PCI
@@ -737,12 +752,8 @@ Bool AMDGPUPreInit_KMS(ScrnInfoPtr pScrn, int flags)
 	if (xf86IsEntityShared(pScrn->entityList[0])) {
 		if (xf86IsPrimInitDone(pScrn->entityList[0])) {
 			info->IsSecondary = TRUE;
-			pAMDGPUEnt->pSecondaryScrn = pScrn;
 		} else {
-			info->IsPrimary = TRUE;
 			xf86SetPrimInitDone(pScrn->entityList[0]);
-			pAMDGPUEnt->pPrimaryScrn = pScrn;
-			pAMDGPUEnt->HasSecondary = FALSE;
 		}
 	}
 
@@ -765,11 +776,9 @@ Bool AMDGPUPreInit_KMS(ScrnInfoPtr pScrn, int flags)
 	if (!AMDGPUPreInitChipType_KMS(pScrn))
 		goto fail;
 
-	amdgpu_reference_drm_fd(pScrn);
-
 	info->dri2.available = FALSE;
 	info->dri2.enabled = FALSE;
-	info->dri2.pKernelDRMVersion = drmGetVersion(info->dri2.drm_fd);
+	info->dri2.pKernelDRMVersion = drmGetVersion(pAMDGPUEnt->fd);
 	if (info->dri2.pKernelDRMVersion == NULL) {
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
 			   "AMDGPUDRIGetVersion failed to get the DRM version\n");
@@ -822,6 +831,10 @@ Bool AMDGPUPreInit_KMS(ScrnInfoPtr pScrn, int flags)
 			   info->allowPageFlip ? "en" : "dis");
 	}
 
+	if (xf86ReturnOptValBool(info->Options, OPTION_DELETE_DP12, FALSE)) {
+		info->drmmode.delete_dp_12_displays = TRUE;
+	}
+
 	if (drmmode_pre_init(pScrn, &info->drmmode, pScrn->bitsPerPixel / 8) ==
 	    FALSE) {
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
@@ -829,7 +842,7 @@ Bool AMDGPUPreInit_KMS(ScrnInfoPtr pScrn, int flags)
 		goto fail;
 	}
 
-	if (info->drmmode.mode_res->count_crtcs == 1)
+	if (info->drmmode.count_crtcs == 1)
 		pAMDGPUEnt->HasCRTC2 = FALSE;
 	else
 		pAMDGPUEnt->HasCRTC2 = TRUE;
@@ -938,6 +951,39 @@ void AMDGPUUnblank(ScrnInfoPtr pScrn)
 	}
 }
 
+static Bool amdgpu_set_drm_master(ScrnInfoPtr pScrn)
+{
+	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(pScrn);
+	int err;
+
+#ifdef XF86_PDEV_SERVER_FD
+	if (pAMDGPUEnt->platform_dev &&
+	    (pAMDGPUEnt->platform_dev->flags & XF86_PDEV_SERVER_FD))
+		return TRUE;
+#endif
+
+	err = drmSetMaster(pAMDGPUEnt->fd);
+	if (err)
+		ErrorF("Unable to retrieve master\n");
+
+	return err == 0;
+}
+
+static void amdgpu_drop_drm_master(ScrnInfoPtr pScrn)
+{
+	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(pScrn);
+
+#ifdef XF86_PDEV_SERVER_FD
+	if (pAMDGPUEnt->platform_dev &&
+	    (pAMDGPUEnt->platform_dev->flags & XF86_PDEV_SERVER_FD))
+		return;
+#endif
+
+	drmDropMaster(pAMDGPUEnt->fd);
+}
+
+
+
 static Bool AMDGPUSaveScreen_KMS(ScreenPtr pScreen, int mode)
 {
 	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
@@ -981,8 +1027,7 @@ static Bool AMDGPUCloseScreen_KMS(CLOSE_SCREEN_ARGS_DECL)
 	DeleteCallback(&FlushCallback, amdgpu_flush_callback, pScrn);
 
 	amdgpu_sync_close(pScreen);
-
-	drmDropMaster(info->dri2.drm_fd);
+	amdgpu_drop_drm_master(pScrn);
 
 	drmmode_fini(pScrn, &info->drmmode);
 	if (info->dri2.enabled) {
@@ -998,14 +1043,9 @@ static Bool AMDGPUCloseScreen_KMS(CLOSE_SCREEN_ARGS_DECL)
 void AMDGPUFreeScreen_KMS(FREE_SCREEN_ARGS_DECL)
 {
 	SCRN_INFO_PTR(arg);
-	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
 
 	xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, AMDGPU_LOGLEVEL_DEBUG,
 		       "AMDGPUFreeScreen\n");
-
-	/* when server quits at PreInit, we don't need do this anymore */
-	if (!info)
-		return;
 
 	AMDGPUFreeRec(pScrn);
 }
@@ -1018,9 +1058,8 @@ Bool AMDGPUScreenInit_KMS(SCREEN_INIT_ARGS_DECL)
 	MessageType from;
 	Bool value;
 	int driLevel;
-	char *s;
+	const char *s;
 	void *front_ptr;
-	int ret;
 
 	pScrn->fbOffset = 0;
 
@@ -1031,11 +1070,9 @@ Bool AMDGPUScreenInit_KMS(SCREEN_INIT_ARGS_DECL)
 		return FALSE;
 	miSetPixmapDepths();
 
-	ret = drmSetMaster(info->dri2.drm_fd);
-	if (ret) {
-		ErrorF("Unable to retrieve master\n");
+	if (!amdgpu_set_drm_master(pScrn))
 		return FALSE;
-	}
+
 	info->directRenderingEnabled = FALSE;
 	if (info->shadow_fb == FALSE)
 		info->directRenderingEnabled = amdgpu_dri2_screen_init(pScreen);
@@ -1255,14 +1292,11 @@ Bool AMDGPUEnterVT_KMS(VT_FUNC_ARGS_DECL)
 {
 	SCRN_INFO_PTR(arg);
 	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
-	int ret;
 
 	xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, AMDGPU_LOGLEVEL_DEBUG,
 		       "AMDGPUEnterVT_KMS\n");
 
-	ret = drmSetMaster(info->dri2.drm_fd);
-	if (ret)
-		ErrorF("Unable to retrieve master\n");
+	amdgpu_set_drm_master(pScrn);
 
 	pScrn->vtSema = TRUE;
 
@@ -1275,12 +1309,11 @@ Bool AMDGPUEnterVT_KMS(VT_FUNC_ARGS_DECL)
 void AMDGPULeaveVT_KMS(VT_FUNC_ARGS_DECL)
 {
 	SCRN_INFO_PTR(arg);
-	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
 
 	xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, AMDGPU_LOGLEVEL_DEBUG,
 		       "AMDGPULeaveVT_KMS\n");
 
-	drmDropMaster(info->dri2.drm_fd);
+	amdgpu_drop_drm_master(pScrn);
 
 	xf86RotateFreeShadow(pScrn);
 	drmmode_scanout_free(pScrn);

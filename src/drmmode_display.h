@@ -41,9 +41,7 @@
 #endif
 
 typedef struct {
-	int fd;
 	unsigned fb_id;
-	drmModeResPtr mode_res;
 	drmModeFBPtr mode_fb;
 	int cpp;
 	ScrnInfoPtr scrn;
@@ -52,22 +50,28 @@ typedef struct {
 	InputHandlerProc uevent_handler;
 #endif
 	drmEventContext event_context;
+	int count_crtcs;
+
+	Bool delete_dp_12_displays;
+
+	Bool dri2_flipping;
+	Bool present_flipping;
 } drmmode_rec, *drmmode_ptr;
 
 typedef struct {
-	drmmode_ptr drmmode;
+	int fd;
 	unsigned old_fb_id;
 	int flip_count;
 	void *event_data;
 	unsigned int fe_frame;
 	uint64_t fe_usec;
+	amdgpu_drm_handler_proc handler;
+	amdgpu_drm_abort_proc abort;
 } drmmode_flipdata_rec, *drmmode_flipdata_ptr;
 
 typedef struct {
 	drmmode_flipdata_ptr flipdata;
 	Bool dispatch_me;
-	amdgpu_drm_handler_proc handler;
-	amdgpu_drm_abort_proc abort;
 } drmmode_flipevtcarrier_rec, *drmmode_flipevtcarrier_ptr;
 
 struct drmmode_scanout {
@@ -94,6 +98,9 @@ typedef struct {
 	uint32_t interpolated_vblanks;
 	uint16_t lut_r[256], lut_g[256], lut_b[256];
 	int prime_pixmap_x;
+
+	/* Modeset needed for DPMS on */
+	Bool need_modeset;
 } drmmode_crtc_private_rec, *drmmode_crtc_private_ptr;
 
 typedef struct {

@@ -26,7 +26,7 @@
 # _ladir passes a dummy rpath to libtool so the thing will actually link
 # TODO: -nostdlib/-Bstatic/-lgcc platform magic, not installing the .a, etc.
 
-amdgpu_drv_la_LIBADD = $(PCIACCESS_LIBS) $(LIBDRM_AMDGPU_LIBS) $(GBM_LIBS)
+amdgpu_drv_la_LIBADD = $(LIBDRM_AMDGPU_LIBS) $(GBM_LIBS)
 
 AMDGPU_KMS_SRCS=amdgpu_bo_helper.c amdgpu_dri2.c amdgpu_dri3.c amdgpu_drm_queue.c \
 	amdgpu_kms.c amdgpu_present.c amdgpu_sync.c drmmode_display.c
@@ -63,6 +63,7 @@ EXTRA_DIST = \
 	amdgpu_glamor.h \
 	amdgpu_drv.h \
 	amdgpu_list.h \
+	amdgpu_pixmap.h \
 	amdgpu_probe.h \
 	amdgpu_version.h \
 	amdgpu_video.h \

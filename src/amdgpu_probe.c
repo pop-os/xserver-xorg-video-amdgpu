@@ -43,6 +43,7 @@
 
 #include "amdgpu_probe.h"
 #include "amdgpu_version.h"
+#include "amdgpu_drv.h"
 #include "amdpciids.h"
 
 #include "xf86.h"
@@ -111,12 +112,20 @@ static Bool amdgpu_kernel_mode_enabled(ScrnInfoPtr pScrn,
 	return TRUE;
 }
 
-static int amdgpu_kernel_open_fd(ScrnInfoPtr pScrn, struct pci_device *dev)
+static int amdgpu_kernel_open_fd(ScrnInfoPtr pScrn, struct pci_device *dev,
+				 struct xf86_platform_device *platform_dev)
 {
 	char *busid;
-	drmSetVersion sv;
-	int err;
 	int fd;
+
+#ifdef XF86_PDEV_SERVER_FD
+	if (platform_dev) {
+		fd = xf86_get_platform_device_int_attrib(platform_dev,
+							 ODEV_ATTRIB_FD, -1);
+		if (fd != -1)
+			return fd;
+	}
+#endif
 
 #if XORG_VERSION_CURRENT >= XORG_VERSION_NUMERIC(1,9,99,901,0)
 	XNFasprintf(&busid, "pci:%04x:%02x:%02x.%d",
@@ -127,13 +136,26 @@ static int amdgpu_kernel_open_fd(ScrnInfoPtr pScrn, struct pci_device *dev)
 #endif
 
 	fd = drmOpen(NULL, busid);
-	free(busid);
 	if (fd == -1) {
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
 			   "[drm] Failed to open DRM device for %s: %s\n",
 			   busid, strerror(errno));
+		free(busid);
 		return fd;
 	}
+	free(busid);
+	return fd;
+}
+
+static Bool amdgpu_open_drm_master(ScrnInfoPtr pScrn, AMDGPUEntPtr pAMDGPUEnt,
+				   struct pci_device *pci_dev)
+{
+	drmSetVersion sv;
+	int err;
+
+	pAMDGPUEnt->fd = amdgpu_kernel_open_fd(pScrn, pci_dev, NULL);
+	if (pAMDGPUEnt->fd == -1)
+		return FALSE;
 
 	/* Check that what we opened was a master or a master-capable FD,
 	 * by setting the version of the interface we'll use to talk to it.
@@ -143,18 +165,18 @@ static int amdgpu_kernel_open_fd(ScrnInfoPtr pScrn, struct pci_device *dev)
 	sv.drm_di_minor = 1;
 	sv.drm_dd_major = -1;
 	sv.drm_dd_minor = -1;
-	err = drmSetInterfaceVersion(fd, &sv);
+	err = drmSetInterfaceVersion(pAMDGPUEnt->fd, &sv);
 	if (err != 0) {
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
 			   "[drm] failed to set drm interface version.\n");
-		drmClose(fd);
-		return -1;
+		drmClose(pAMDGPUEnt->fd);
+		return FALSE;
 	}
 
-	return fd;
+	return TRUE;
 }
 
-static Bool amdgpu_get_scrninfo(int entity_num, void *pci_dev)
+static Bool amdgpu_get_scrninfo(int entity_num, struct pci_device *pci_dev)
 {
 	ScrnInfoPtr pScrn = NULL;
 	EntityInfoPtr pEnt;
@@ -204,11 +226,11 @@ static Bool amdgpu_get_scrninfo(int entity_num, void *pci_dev)
 		uint32_t minor_version;
 
 		pPriv->ptr = xnfcalloc(sizeof(AMDGPUEntRec), 1);
-		pAMDGPUEnt = pPriv->ptr;
-		pAMDGPUEnt->HasSecondary = FALSE;
+		if (!pPriv->ptr)
+			return FALSE;
 
-		pAMDGPUEnt->fd = amdgpu_kernel_open_fd(pScrn, pci_dev);
-		if (pAMDGPUEnt->fd < 0)
+		pAMDGPUEnt = pPriv->ptr;
+		if (!amdgpu_open_drm_master(pScrn, pAMDGPUEnt, pci_dev))
 			goto error_fd;
 
 		pAMDGPUEnt->fd_ref = 1;
@@ -223,7 +245,7 @@ static Bool amdgpu_get_scrninfo(int entity_num, void *pci_dev)
 		}
 	} else {
 		pAMDGPUEnt = pPriv->ptr;
-		pAMDGPUEnt->HasSecondary = TRUE;
+		pAMDGPUEnt->fd_ref++;
 	}
 
 	xf86SetEntityInstanceForScreen(pScrn, pEnt->index,
@@ -236,7 +258,6 @@ static Bool amdgpu_get_scrninfo(int entity_num, void *pci_dev)
 
 error_amdgpu:
 	drmClose(pAMDGPUEnt->fd);
-	pAMDGPUEnt->fd = 0;
 error_fd:
 	free(pPriv->ptr);
 	return FALSE;
@@ -246,7 +267,7 @@ static Bool
 amdgpu_pci_probe(DriverPtr pDriver,
 		 int entity_num, struct pci_device *device, intptr_t match_data)
 {
-	return amdgpu_get_scrninfo(entity_num, (void *)device);
+	return amdgpu_get_scrninfo(entity_num, device);
 }
 
 static Bool AMDGPUDriverFunc(ScrnInfoPtr scrn, xorgDriverFuncOp op, void *data)
@@ -258,7 +279,11 @@ static Bool AMDGPUDriverFunc(ScrnInfoPtr scrn, xorgDriverFuncOp op, void *data)
 		flag = (CARD32 *) data;
 		(*flag) = 0;
 		return TRUE;
-	default:
+#if XORG_VERSION_CURRENT > XORG_VERSION_NUMERIC(1,15,99,0,0)
+	case SUPPORTS_SERVER_FDS:
+		return TRUE;
+#endif
+       default:
 		return FALSE;
 	}
 }
@@ -320,8 +345,7 @@ amdgpu_platform_probe(DriverPtr pDriver,
 
 		pPriv->ptr = xnfcalloc(sizeof(AMDGPUEntRec), 1);
 		pAMDGPUEnt = pPriv->ptr;
-		pAMDGPUEnt->HasSecondary = FALSE;
-		pAMDGPUEnt->fd = amdgpu_kernel_open_fd(pScrn, dev->pdev);
+		pAMDGPUEnt->fd = amdgpu_kernel_open_fd(pScrn, dev->pdev, dev);
 		if (pAMDGPUEnt->fd < 0)
 			goto error_fd;
 
@@ -337,8 +361,9 @@ amdgpu_platform_probe(DriverPtr pDriver,
 		}
 	} else {
 		pAMDGPUEnt = pPriv->ptr;
-		pAMDGPUEnt->HasSecondary = TRUE;
+		pAMDGPUEnt->fd_ref++;
 	}
+	pAMDGPUEnt->platform_dev = dev;
 
 	xf86SetEntityInstanceForScreen(pScrn, pEnt->index,
 				       xf86GetNumEntityInstances(pEnt->
@@ -350,7 +375,6 @@ amdgpu_platform_probe(DriverPtr pDriver,
 
 error_amdgpu:
 	drmClose(pAMDGPUEnt->fd);
-	pAMDGPUEnt->fd = 0;
 error_fd:
 	free(pPriv->ptr);
 	return FALSE;

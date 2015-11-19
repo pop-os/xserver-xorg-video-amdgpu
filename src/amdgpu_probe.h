@@ -37,11 +37,16 @@
 #define _AMDGPU_PROBE_H_ 1
 
 #include <stdint.h>
+#include "xorg-server.h"
 #include "xf86str.h"
 #include "xf86DDC.h"
 #include "randrstr.h"
 
 #include "xf86Crtc.h"
+
+#ifdef XSERVER_PLATFORM_BUS
+#include "xf86platformBus.h"
+#endif
 
 #include <amdgpu.h>
 
@@ -61,6 +66,7 @@ typedef enum {
 	CHIP_FAMILY_TONGA,
 	CHIP_FAMILY_CARRIZO,
 	CHIP_FAMILY_FIJI,
+	CHIP_FAMILY_STONEY,
 	CHIP_FAMILY_LAST
 } AMDGPUChipFamily;
 
@@ -70,11 +76,8 @@ typedef struct {
 } AMDGPUCardInfo;
 
 typedef struct {
-	Bool HasSecondary;
 	Bool HasCRTC2;		/* All cards except original Radeon  */
 
-	ScrnInfoPtr pSecondaryScrn;
-	ScrnInfoPtr pPrimaryScrn;
 	amdgpu_device_handle pDev;
 
 	int fd;			/* for sharing across zaphod heads   */
@@ -82,6 +85,7 @@ typedef struct {
 	unsigned long fd_wakeup_registered;	/* server generation for which fd has been registered for wakeup handling */
 	int fd_wakeup_ref;
 	unsigned int assigned_crtcs;
+	struct xf86_platform_device *platform_dev;
 } AMDGPUEntRec, *AMDGPUEntPtr;
 
 extern const OptionInfoRec *AMDGPUOptionsWeak(void);
