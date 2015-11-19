@@ -1,3 +1,9 @@
+xserver-xorg-video-amdgpu (1.0.0-1) UNRELEASED; urgency=medium
+
+  * First upstream release.
+
+ -- Andreas Boll <andreas.boll.dev@gmail.com>  Thu, 19 Nov 2015 12:08:49 +0100
+
 xserver-xorg-video-amdgpu (0.0.01~git20150807-1) unstable; urgency=low
 
   * Initial release (Closes: #795686)
