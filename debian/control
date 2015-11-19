@@ -34,7 +34,7 @@ Depends:
  ${misc:Depends},
  ${xviddriver:Depends},
 Provides: ${xviddriver:Provides}
-Suggests: linux-firmware
+Suggests: firmware-amd-graphics
 Description: X.Org X server -- AMDGPU display driver
  This package provides the 'amdgpu' driver for the AMD Radeon cards. The
  following chip families should be supported: Bonaire, Hawaii, Kaveri, Kabini
