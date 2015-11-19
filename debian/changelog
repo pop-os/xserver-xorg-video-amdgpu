@@ -6,6 +6,7 @@ xserver-xorg-video-amdgpu (1.0.0-1) UNRELEASED; urgency=medium
     graphics.
   * Remove unused libpciaccess-dev build-dep.
   * Update list of supported chips.
+  * Use https for Vcs-* fields.
 
  -- Andreas Boll <andreas.boll.dev@gmail.com>  Thu, 19 Nov 2015 12:08:49 +0100
 
