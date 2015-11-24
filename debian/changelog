@@ -1,5 +1,6 @@
-xserver-xorg-video-amdgpu (1.0.0-1) UNRELEASED; urgency=medium
+xserver-xorg-video-amdgpu (1.0.0-1) unstable; urgency=medium
 
+  [ Andreas Boll ]
   * First upstream release.
   * Let uscan verify tarball signatures.
   * Replace non-existing Suggests: linux-firmware with new firmware-amd-
@@ -8,7 +9,7 @@ xserver-xorg-video-amdgpu (1.0.0-1) UNRELEASED; urgency=medium
   * Update list of supported chips.
   * Use https for Vcs-* fields.
 
- -- Andreas Boll <andreas.boll.dev@gmail.com>  Thu, 19 Nov 2015 12:08:49 +0100
+ -- Timo Aaltonen <tjaalton@debian.org>  Tue, 24 Nov 2015 15:46:07 +0200
 
 xserver-xorg-video-amdgpu (0.0.01~git20150807-1) unstable; urgency=low
 
