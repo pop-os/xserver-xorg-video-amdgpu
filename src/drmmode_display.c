@@ -905,7 +905,7 @@ static Bool drmmode_set_scanout_pixmap(xf86CrtcPtr crtc, PixmapPtr ppix)
 			if (max_height < iter->mode.VDisplay)
 				max_height = iter->mode.VDisplay;
 		}
-#ifndef HAS_DIRTYTRACKING2
+#if !defined(HAS_DIRTYTRACKING_ROTATION) && !defined(HAS_DIRTYTRACKING2)
 		if (iter != crtc) {
 			ErrorF
 			    ("Cannot do multiple crtcs without X server dirty tracking 2 interface\n");
@@ -993,6 +993,7 @@ drmmode_crtc_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode, drmModeResPtr mode_res
 	drmmode_crtc->mode_crtc =
 	    drmModeGetCrtc(pAMDGPUEnt->fd, mode_res->crtcs[num]);
 	drmmode_crtc->drmmode = drmmode;
+	drmmode_crtc->dpms_mode = DPMSModeOff;
 	crtc->driver_private = drmmode_crtc;
 	drmmode_crtc_hw_id(crtc);
 
@@ -1116,6 +1117,9 @@ static void drmmode_output_dpms(xf86OutputPtr output, int mode)
 	xf86CrtcPtr crtc = output->crtc;
 	drmModeConnectorPtr koutput = drmmode_output->mode_output;
 	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(output->scrn);
+
+	if (!koutput)
+		return;
 
 	if (mode != DPMSModeOn && crtc)
 		drmmode_do_crtc_dpms(crtc, mode);
@@ -1737,7 +1741,7 @@ static Bool drmmode_xf86crtc_resize(ScrnInfoPtr scrn, int width, int height)
 		goto fail;
 	}
 
-	if (amdgpu_bo_map(scrn, info->front_buffer)) {
+	if (!info->use_glamor && amdgpu_bo_map(scrn, info->front_buffer) != 0) {
 		xf86DrvMsg(scrn->scrnIndex, X_ERROR,
 			   "Failed to map front buffer memory\n");
 		goto fail;

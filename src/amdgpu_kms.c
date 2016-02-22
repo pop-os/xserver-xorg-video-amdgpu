@@ -663,25 +663,23 @@ static Bool amdgpu_get_tile_config(ScrnInfoPtr pScrn)
 static void AMDGPUSetupCapabilities(ScrnInfoPtr pScrn)
 {
 #ifdef AMDGPU_PIXMAP_SHARING
+	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
 	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(pScrn);
 	uint64_t value;
 	int ret;
 
 	pScrn->capabilities = 0;
+
+	/* PRIME offloading requires acceleration */
+	if (!info->use_glamor)
+		return;
+
 	ret = drmGetCap(pAMDGPUEnt->fd, DRM_CAP_PRIME, &value);
 	if (ret == 0) {
-		AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
-
-		if (value & DRM_PRIME_CAP_EXPORT) {
-			pScrn->capabilities |= RR_Capability_SourceOutput;
-			if (info->use_glamor && info->dri2.available)
-				pScrn->capabilities |= RR_Capability_SinkOffload;
-		}
-		if (value & DRM_PRIME_CAP_IMPORT) {
-			pScrn->capabilities |= RR_Capability_SinkOutput;
-			if (info->use_glamor && info->dri2.available)
-				pScrn->capabilities |= RR_Capability_SourceOffload;
-		}
+		if (value & DRM_PRIME_CAP_EXPORT)
+			pScrn->capabilities |= RR_Capability_SourceOutput | RR_Capability_SinkOffload;
+		if (value & DRM_PRIME_CAP_IMPORT)
+			pScrn->capabilities |= RR_Capability_SinkOutput | RR_Capability_SourceOffload;
 	}
 #endif
 }
@@ -785,6 +783,10 @@ Bool AMDGPUPreInit_KMS(ScrnInfoPtr pScrn, int flags)
 		goto fail;
 	}
 
+	/* Get ScreenInit function */
+	if (!xf86LoadSubModule(pScrn, "fb"))
+		return FALSE;
+
 	if (!AMDGPUPreInitAccel_KMS(pScrn))
 		goto fail;
 
@@ -869,10 +871,6 @@ Bool AMDGPUPreInit_KMS(ScrnInfoPtr pScrn, int flags)
 
 	/* Set display resolution */
 	xf86SetDpi(pScrn, 0, 0);
-
-	/* Get ScreenInit function */
-	if (!xf86LoadSubModule(pScrn, "fb"))
-		return FALSE;
 
 	if (!xf86SetGamma(pScrn, zeros))
 		return FALSE;
@@ -1415,7 +1413,8 @@ static Bool amdgpu_setup_kernel_mem(ScreenPtr pScreen)
 			return FALSE;
 		}
 
-		if (amdgpu_bo_map(pScrn, info->front_buffer)) {
+		if (!info->use_glamor &&
+		    amdgpu_bo_map(pScrn, info->front_buffer) != 0) {
 			ErrorF("Failed to map front buffer memory\n");
 			return FALSE;
 		}
