@@ -65,14 +65,10 @@ typedef struct {
 	void *event_data;
 	unsigned int fe_frame;
 	uint64_t fe_usec;
+	xf86CrtcPtr fe_crtc;
 	amdgpu_drm_handler_proc handler;
 	amdgpu_drm_abort_proc abort;
 } drmmode_flipdata_rec, *drmmode_flipdata_ptr;
-
-typedef struct {
-	drmmode_flipdata_ptr flipdata;
-	Bool dispatch_me;
-} drmmode_flipevtcarrier_rec, *drmmode_flipevtcarrier_ptr;
 
 struct drmmode_scanout {
 	struct amdgpu_buffer *bo;
@@ -101,6 +97,8 @@ typedef struct {
 
 	/* Modeset needed for DPMS on */
 	Bool need_modeset;
+	/* A flip is pending for this CRTC */
+	Bool flip_pending;
 } drmmode_crtc_private_rec, *drmmode_crtc_private_ptr;
 
 typedef struct {
@@ -144,7 +142,7 @@ extern void drmmode_uevent_fini(ScrnInfoPtr scrn, drmmode_ptr drmmode);
 extern int drmmode_get_crtc_id(xf86CrtcPtr crtc);
 extern int drmmode_get_pitch_align(ScrnInfoPtr scrn, int bpe);
 Bool amdgpu_do_pageflip(ScrnInfoPtr scrn, ClientPtr client,
-			struct amdgpu_buffer *new_front, uint64_t id, void *data,
+			PixmapPtr new_front, uint64_t id, void *data,
 			int ref_crtc_hw_id, amdgpu_drm_handler_proc handler,
 			amdgpu_drm_abort_proc abort);
 int drmmode_crtc_get_ust_msc(xf86CrtcPtr crtc, CARD64 *ust, CARD64 *msc);

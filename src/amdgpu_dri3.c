@@ -38,6 +38,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <libgen.h>
 
 
 static int
@@ -87,6 +88,38 @@ amdgpu_dri3_open(ScreenPtr screen, RRProviderPtr provider, int *out)
 	return Success;
 }
 
+#if DRI3_SCREEN_INFO_VERSION >= 1 && XORG_VERSION_CURRENT <= XORG_VERSION_NUMERIC(1,18,99,1,0)
+
+static int
+amdgpu_dri3_open_client(ClientPtr client, ScreenPtr screen,
+			RRProviderPtr provider, int *out)
+{
+	const char *cmdname = GetClientCmdName(client);
+	Bool is_ssh = FALSE;
+
+	/* If the executable name is "ssh", assume that this client connection
+	 * is forwarded from another host via SSH
+	 */
+	if (cmdname) {
+		char *cmd = strdup(cmdname);
+
+		/* Cut off any colon and whatever comes after it, see
+		 * https://lists.freedesktop.org/archives/xorg-devel/2015-December/048164.html
+		 */
+		cmd = strtok(cmd, ":");
+
+		is_ssh = strcmp(basename(cmd), "ssh") == 0;
+		free(cmd);
+	}
+
+	if (!is_ssh)
+		return amdgpu_dri3_open(screen, provider, out);
+
+	return BadAccess;
+}
+
+#endif /* DRI3_SCREEN_INFO_VERSION >= 1 && XORG_VERSION_CURRENT <= XORG_VERSION_NUMERIC(1,18,99,1,0) */
+
 static PixmapPtr amdgpu_dri3_pixmap_from_fd(ScreenPtr screen,
 					    int fd,
 					    CARD16 width,
@@ -96,6 +129,20 @@ static PixmapPtr amdgpu_dri3_pixmap_from_fd(ScreenPtr screen,
 					    CARD8 bpp)
 {
 	PixmapPtr pixmap;
+
+#ifdef USE_GLAMOR
+	/* Avoid generating a GEM flink name if possible */
+	if (AMDGPUPTR(xf86ScreenToScrn(screen))->use_glamor) {
+		pixmap = glamor_pixmap_from_fd(screen, fd, width, height,
+					       stride, depth, bpp);
+		if (pixmap) {
+			struct amdgpu_pixmap *priv = calloc(1, sizeof(*priv));
+
+			amdgpu_set_pixmap_private(pixmap, priv);
+			return pixmap;
+		}
+	}
+#endif
 
 	if (depth < 8)
 		return NULL;
@@ -162,9 +209,13 @@ static int amdgpu_dri3_fd_from_pixmap(ScreenPtr screen,
 }
 
 static dri3_screen_info_rec amdgpu_dri3_screen_info = {
+#if DRI3_SCREEN_INFO_VERSION >= 1 && XORG_VERSION_CURRENT <= XORG_VERSION_NUMERIC(1,18,99,1,0)
+	.version = 1,
+	.open_client = amdgpu_dri3_open_client,
+#else
 	.version = 0,
-
 	.open = amdgpu_dri3_open,
+#endif
 	.pixmap_from_fd = amdgpu_dri3_pixmap_from_fd,
 	.fd_from_pixmap = amdgpu_dri3_fd_from_pixmap
 };

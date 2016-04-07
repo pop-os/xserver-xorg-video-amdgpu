@@ -33,21 +33,17 @@ struct amdgpu_pixmap {
 	uint_fast32_t gpu_write;
 
 	struct amdgpu_buffer *bo;
+
+	/* GEM handle for pixmaps shared via DRI2/3 */
+	Bool handle_valid;
+	uint32_t handle;
 };
 
-#if HAS_DEVPRIVATEKEYREC
 extern DevPrivateKeyRec amdgpu_pixmap_index;
-#else
-extern int amdgpu_pixmap_index;
-#endif
 
 static inline struct amdgpu_pixmap *amdgpu_get_pixmap_private(PixmapPtr pixmap)
 {
-#if HAS_DEVPRIVATEKEYREC
 	return dixGetPrivate(&pixmap->devPrivates, &amdgpu_pixmap_index);
-#else
-	return dixLookupPrivate(&pixmap->devPrivates, &amdgpu_pixmap_index);
-#endif
 }
 
 static inline void amdgpu_set_pixmap_private(PixmapPtr pixmap,
@@ -55,10 +51,6 @@ static inline void amdgpu_set_pixmap_private(PixmapPtr pixmap,
 {
 	dixSetPrivate(&pixmap->devPrivates, &amdgpu_pixmap_index, priv);
 }
-
-#if XF86_CRTC_VERSION >= 5
-#define AMDGPU_PIXMAP_SHARING 1
-#endif
 
 static inline void amdgpu_set_pixmap_bo(PixmapPtr pPix, struct amdgpu_buffer *bo)
 {
@@ -74,6 +66,7 @@ static inline void amdgpu_set_pixmap_bo(PixmapPtr pPix, struct amdgpu_buffer *bo
 
 		if (priv->bo) {
 			amdgpu_bo_unref(&priv->bo);
+			priv->handle_valid = FALSE;
 		}
 
 		if (!bo) {

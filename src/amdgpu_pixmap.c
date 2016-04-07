@@ -103,11 +103,7 @@ static Bool amdgpu_pixmap_destroy(PixmapPtr pixmap)
 /* This should only be called when glamor is disabled */
 Bool amdgpu_pixmap_init(ScreenPtr screen)
 {
-#if HAS_DIXREGISTERPRIVATEKEY
 	if (!dixRegisterPrivateKey(&amdgpu_pixmap_index, PRIVATE_PIXMAP, 0))
-#else
-	if (!dixRequestPrivate(&amdgpu_pixmap_index, 0))
-#endif
 		return FALSE;
 
 	screen->CreatePixmap = amdgpu_pixmap_create;

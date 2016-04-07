@@ -148,6 +148,10 @@ typedef enum {
 	OPTION_DELETE_DP12,
 } AMDGPUOpts;
 
+#if XF86_CRTC_VERSION >= 5
+#define AMDGPU_PIXMAP_SHARING 1
+#endif
+
 #define AMDGPU_VSYNC_TIMEOUT	20000	/* Maximum wait for VSYNC (in usecs) */
 
 /* Buffer are aligned on 4096 byte boundaries */
@@ -244,6 +248,11 @@ typedef struct {
 	int cursor_w;
 	int cursor_h;
 
+	/* If bit n of this field is set, xf86_config->crtc[n] currently can't
+	 * use the HW cursor
+	 */
+	unsigned hwcursor_disabled;
+
 	struct {
 		CreateGCProcPtr SavedCreateGC;
 		RegionPtr (*SavedCopyArea)(DrawablePtr, DrawablePtr, GCPtr,
@@ -265,6 +274,10 @@ typedef struct {
 		AddTrapsProcPtr SavedAddTraps;
 		UnrealizeGlyphProcPtr SavedUnrealizeGlyph;
 #endif
+#ifdef AMDGPU_PIXMAP_SHARING
+		SharePixmapBackingProcPtr SavedSharePixmapBacking;
+		SetSharedPixmapBackingProcPtr SavedSetSharedPixmapBacking;
+#endif
 	} glamor;
 
 } AMDGPUInfoRec, *AMDGPUInfoPtr;
@@ -274,7 +287,7 @@ typedef struct {
 Bool amdgpu_dri3_screen_init(ScreenPtr screen);
 
 /* amdgpu_kms.c */
-void amdgpu_scanout_update_handler(ScrnInfoPtr scrn, uint32_t frame,
+void amdgpu_scanout_update_handler(xf86CrtcPtr crtc, uint32_t frame,
 				   uint64_t usec, void *event_data);
 
 /* amdgpu_present.c */

@@ -41,7 +41,12 @@
 #include "drmmode_display.h"
 #include "amdgpu_bo_helper.h"
 #include "amdgpu_glamor.h"
+#include "amdgpu_list.h"
 #include "amdgpu_pixmap.h"
+
+#ifdef AMDGPU_PIXMAP_SHARING
+#include <dri.h>
+#endif
 
 /* DPMS */
 #ifdef HAVE_XEXTPROTO_71
@@ -563,10 +568,70 @@ amdgpu_screen_damage_report(DamagePtr damage, RegionPtr region, void *closure)
 }
 
 static Bool
+drmmode_can_use_hw_cursor(xf86CrtcPtr crtc)
+{
+	AMDGPUInfoPtr info = AMDGPUPTR(crtc->scrn);
+
+	/* Check for Option "SWcursor" */
+	if (xf86ReturnOptValBool(info->Options, OPTION_SW_CURSOR, FALSE))
+		return FALSE;
+
+	/* Fall back to SW cursor if the CRTC is transformed */
+	if (crtc->transformPresent)
+		return FALSE;
+
+#if XF86_CRTC_VERSION >= 4
+	/* Xorg doesn't correctly handle cursor position transform in the
+	 * rotation case
+	 */
+	if (crtc->driverIsPerformingTransform &&
+	    (crtc->rotation & 0xf) != RR_Rotate_0)
+		return FALSE;
+#endif
+
+#ifdef AMDGPU_PIXMAP_SHARING
+	/* HW cursor not supported yet with RandR 1.4 multihead */
+	if (!xorg_list_is_empty(&crtc->scrn->pScreen->pixmap_dirty_list))
+		return FALSE;
+#endif
+
+	return TRUE;
+}
+
+#if XF86_CRTC_VERSION >= 4
+
+static Bool
+drmmode_handle_transform(xf86CrtcPtr crtc)
+{
+	AMDGPUInfoPtr info = AMDGPUPTR(crtc->scrn);
+	Bool ret;
+
+	crtc->driverIsPerformingTransform = info->tear_free &&
+		!crtc->transformPresent && crtc->rotation != RR_Rotate_0;
+
+	ret = xf86CrtcRotate(crtc);
+
+	crtc->driverIsPerformingTransform &= ret && crtc->transform_in_use;
+
+	return ret;
+}
+
+#else
+
+static Bool
+drmmode_handle_transform(xf86CrtcPtr crtc)
+{
+	return xf86CrtcRotate(crtc);
+}
+
+#endif
+
+static Bool
 drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 		       Rotation rotation, int x, int y)
 {
 	ScrnInfoPtr pScrn = crtc->scrn;
+	ScreenPtr pScreen = pScrn->pScreen;
 	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
 	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(pScrn);
 	xf86CrtcConfigPtr xf86_config = XF86_CRTC_CONFIG_PTR(crtc->scrn);
@@ -611,15 +676,12 @@ drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 		crtc->x = x;
 		crtc->y = y;
 		crtc->rotation = rotation;
-		crtc->transformPresent = FALSE;
 
 		output_ids = calloc(sizeof(uint32_t), xf86_config->num_output);
 		if (!output_ids) {
 			ret = FALSE;
 			goto done;
 		}
-
-		ScreenPtr pScreen = pScrn->pScreen;
 
 		for (i = 0; i < xf86_config->num_output; i++) {
 			xf86OutputPtr output = xf86_config->output[i];
@@ -634,9 +696,9 @@ drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 			output_count++;
 		}
 
-		if (!xf86CrtcRotate(crtc)) {
+		if (!drmmode_handle_transform(crtc))
 			goto done;
-		}
+
 		crtc->funcs->gamma_set(crtc, crtc->gamma_red, crtc->gamma_green,
 				       crtc->gamma_blue, crtc->gamma_size);
 
@@ -658,7 +720,11 @@ drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 
 			drmmode_crtc_scanout_destroy(drmmode, &drmmode_crtc->scanout[0]);
 			drmmode_crtc_scanout_destroy(drmmode, &drmmode_crtc->scanout[1]);
-		} else if (info->tear_free || info->shadow_primary) {
+		} else if (info->tear_free ||
+#if XF86_CRTC_VERSION >= 4
+			   crtc->driverIsPerformingTransform ||
+#endif
+			   info->shadow_primary) {
 			for (i = 0; i < (info->tear_free ? 2 : 1); i++) {
 				drmmode_crtc_scanout_create(crtc,
 							    &drmmode_crtc->scanout[i],
@@ -684,8 +750,17 @@ drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 					pBox = RegionExtents(pRegion);
 					pBox->x1 = min(pBox->x1, x);
 					pBox->y1 = min(pBox->y1, y);
-					pBox->x2 = max(pBox->x2, x + mode->HDisplay);
-					pBox->y2 = max(pBox->y2, y + mode->VDisplay);
+
+					switch (crtc->rotation & 0xf) {
+					case RR_Rotate_90:
+					case RR_Rotate_270:
+						pBox->x2 = max(pBox->x2, x + mode->VDisplay);
+						pBox->y2 = max(pBox->y2, y + mode->HDisplay);
+						break;
+					default:
+						pBox->x2 = max(pBox->x2, x + mode->HDisplay);
+						pBox->y2 = max(pBox->y2, y + mode->VDisplay);
+					}
 				}
 			}
 
@@ -695,10 +770,16 @@ drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 				fb_id = drmmode_crtc->scanout[0].fb_id;
 				x = y = 0;
 
-				amdgpu_scanout_update_handler(pScrn, 0, 0, crtc);
+				amdgpu_scanout_update_handler(crtc, 0, 0, drmmode_crtc);
 				amdgpu_glamor_finish(pScrn);
 			}
 		}
+
+		/* Wait for any pending flip to finish */
+		do {} while (drmmode_crtc->flip_pending &&
+			     drmHandleEvent(pAMDGPUEnt->fd,
+					    &drmmode->event_context) > 0);
+
 		if (drmModeSetCrtc(pAMDGPUEnt->fd,
 				   drmmode_crtc->mode_crtc->crtc_id,
 				   fb_id, x, y, output_ids,
@@ -710,8 +791,8 @@ drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 		} else
 			ret = TRUE;
 
-		if (crtc->scrn->pScreen)
-			xf86CrtcSetScreenSubpixelOrder(crtc->scrn->pScreen);
+		if (pScreen)
+			xf86CrtcSetScreenSubpixelOrder(pScreen);
 
 		drmmode_crtc->need_modeset = FALSE;
 
@@ -726,9 +807,23 @@ drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 		}
 	}
 
-	if (pScrn->pScreen &&
-	    !xf86ReturnOptValBool(info->Options, OPTION_SW_CURSOR, FALSE))
-		xf86_reload_cursors(pScrn->pScreen);
+	/* Compute index of this CRTC into xf86_config->crtc */
+	for (i = 0; i < xf86_config->num_crtc; i++) {
+		if (xf86_config->crtc[i] != crtc)
+			continue;
+
+		if (!crtc->enabled || drmmode_can_use_hw_cursor(crtc))
+			info->hwcursor_disabled &= ~(1 << i);
+		else
+			info->hwcursor_disabled |= 1 << i;
+
+		break;
+	}
+
+#ifndef HAVE_XF86_CURSOR_RESET_CURSOR
+	if (!info->hwcursor_disabled)
+		xf86_reload_cursors(pScreen);
+#endif
 
 done:
 	free(output_ids);
@@ -737,11 +832,8 @@ done:
 		crtc->y = saved_y;
 		crtc->rotation = saved_rotation;
 		crtc->mode = saved_mode;
-	}
-#if defined(XF86_CRTC_VERSION) && XF86_CRTC_VERSION >= 3
-	else
+	} else
 		crtc->active = TRUE;
-#endif
 
 	return ret;
 }
@@ -756,7 +848,83 @@ static void drmmode_set_cursor_position(xf86CrtcPtr crtc, int x, int y)
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
 	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(crtc->scrn);
 
+#if XF86_CRTC_VERSION >= 4
+	if (crtc->driverIsPerformingTransform) {
+		x += crtc->x;
+		y += crtc->y;
+		xf86CrtcTransformCursorPos(crtc, &x, &y);
+	}
+#endif
+
 	drmModeMoveCursor(pAMDGPUEnt->fd, drmmode_crtc->mode_crtc->crtc_id, x, y);
+}
+
+#if XF86_CRTC_VERSION >= 4
+
+static int
+drmmode_cursor_src_offset(Rotation rotation, int width, int height,
+			  int x_dst, int y_dst)
+{
+	int t;
+
+	switch (rotation & 0xf) {
+	case RR_Rotate_90:
+		t = x_dst;
+		x_dst = height - y_dst - 1;
+		y_dst = t;
+		break;
+	case RR_Rotate_180:
+		x_dst = width - x_dst - 1;
+		y_dst = height - y_dst - 1;
+		break;
+	case RR_Rotate_270:
+		t = x_dst;
+		x_dst = y_dst;
+		y_dst = width - t - 1;
+		break;
+	}
+
+	if (rotation & RR_Reflect_X)
+		x_dst = width - x_dst - 1;
+	if (rotation & RR_Reflect_Y)
+		y_dst = height - y_dst - 1;
+
+	return y_dst * height + x_dst;
+}
+
+#endif
+
+static void drmmode_do_load_cursor_argb(xf86CrtcPtr crtc, CARD32 *image, uint32_t *ptr)
+{
+	ScrnInfoPtr pScrn = crtc->scrn;
+	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
+
+#if XF86_CRTC_VERSION >= 4
+	if (crtc->driverIsPerformingTransform) {
+		uint32_t cursor_w = info->cursor_w, cursor_h = info->cursor_h;
+		int dstx, dsty;
+		int srcoffset;
+
+		for (dsty = 0; dsty < cursor_h; dsty++) {
+			for (dstx = 0; dstx < cursor_w; dstx++) {
+				srcoffset = drmmode_cursor_src_offset(crtc->rotation,
+								      cursor_w,
+								      cursor_h,
+								      dstx, dsty);
+
+				ptr[dsty * info->cursor_w + dstx] =
+					cpu_to_le32(image[srcoffset]);
+			}
+		}
+	} else
+#endif
+	{
+		uint32_t cursor_size = info->cursor_w * info->cursor_h;
+		int i;
+
+		for (i = 0; i < cursor_size; i++)
+			ptr[i] = cpu_to_le32(image[i]);
+	}
 }
 
 static void drmmode_load_cursor_argb(xf86CrtcPtr crtc, CARD32 * image)
@@ -764,24 +932,33 @@ static void drmmode_load_cursor_argb(xf86CrtcPtr crtc, CARD32 * image)
 	ScrnInfoPtr pScrn = crtc->scrn;
 	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
-	int i;
 	uint32_t cursor_size = info->cursor_w * info->cursor_h;
 
 	if (info->gbm) {
 		uint32_t ptr[cursor_size];
 
-		for (i = 0; i < cursor_size; i++)
-			ptr[i] = cpu_to_le32(image[i]);
-
+		drmmode_do_load_cursor_argb(crtc, image, ptr);
 		gbm_bo_write(drmmode_crtc->cursor_buffer->bo.gbm, ptr, cursor_size * 4);
 	} else {
 		/* cursor should be mapped already */
 		uint32_t *ptr = (uint32_t *) (drmmode_crtc->cursor_buffer->cpu_ptr);
 
-		for (i = 0; i < cursor_size; i++)
-			ptr[i] = cpu_to_le32(image[i]);
+		drmmode_do_load_cursor_argb(crtc, image, ptr);
 	}
 }
+
+#if XORG_VERSION_CURRENT >= XORG_VERSION_NUMERIC(1,15,99,903,0)
+
+static Bool drmmode_load_cursor_argb_check(xf86CrtcPtr crtc, CARD32 * image)
+{
+	if (!drmmode_can_use_hw_cursor(crtc))
+		return FALSE;
+
+	drmmode_load_cursor_argb(crtc, image);
+	return TRUE;
+}
+
+#endif
 
 static void drmmode_hide_cursor(xf86CrtcPtr crtc)
 {
@@ -947,6 +1124,9 @@ static xf86CrtcFuncsRec drmmode_crtc_funcs = {
 	.show_cursor = drmmode_show_cursor,
 	.hide_cursor = drmmode_hide_cursor,
 	.load_cursor_argb = drmmode_load_cursor_argb,
+#if XORG_VERSION_CURRENT >= XORG_VERSION_NUMERIC(1,15,99,903,0)
+	.load_cursor_argb_check = drmmode_load_cursor_argb_check,
+#endif
 
 	.gamma_set = drmmode_crtc_gamma_set,
 	.shadow_create = drmmode_crtc_shadow_create,
@@ -1835,55 +2015,49 @@ static const xf86CrtcConfigFuncsRec drmmode_xf86crtc_config_funcs = {
 };
 
 static void
-drmmode_flip_free(drmmode_flipevtcarrier_ptr flipcarrier)
+drmmode_flip_abort(xf86CrtcPtr crtc, void *event_data)
 {
-	drmmode_flipdata_ptr flipdata = flipcarrier->flipdata;
+	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
+	drmmode_flipdata_ptr flipdata = event_data;
 
-	free(flipcarrier);
+	if (--flipdata->flip_count == 0) {
+		if (flipdata->fe_crtc)
+			crtc = flipdata->fe_crtc;
+		flipdata->abort(crtc, flipdata->event_data);
+		free(flipdata);
+	}
 
-	if (--flipdata->flip_count > 0)
-		return;
-
-	free(flipdata);
+	drmmode_crtc->flip_pending = FALSE;
 }
 
 static void
-drmmode_flip_abort(ScrnInfoPtr scrn, void *event_data)
+drmmode_flip_handler(xf86CrtcPtr crtc, uint32_t frame, uint64_t usec, void *event_data)
 {
-	drmmode_flipevtcarrier_ptr flipcarrier = event_data;
-	drmmode_flipdata_ptr flipdata = flipcarrier->flipdata;
-
-	if (flipdata->flip_count == 1)
-		flipdata->abort(scrn, flipdata->event_data);
-
-	drmmode_flip_free(flipcarrier);
-}
-
-static void
-drmmode_flip_handler(ScrnInfoPtr scrn, uint32_t frame, uint64_t usec, void *event_data)
-{
-	drmmode_flipevtcarrier_ptr flipcarrier = event_data;
-	drmmode_flipdata_ptr flipdata = flipcarrier->flipdata;
+	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
+	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(crtc->scrn);
+	drmmode_flipdata_ptr flipdata = event_data;
 
 	/* Is this the event whose info shall be delivered to higher level? */
-	if (flipcarrier->dispatch_me) {
+	if (crtc == flipdata->fe_crtc) {
 		/* Yes: Cache msc, ust for later delivery. */
 		flipdata->fe_frame = frame;
 		flipdata->fe_usec = usec;
 	}
 
-	if (flipdata->flip_count == 1) {
+	if (--flipdata->flip_count == 0) {
 		/* Deliver cached msc, ust from reference crtc to flip event handler */
-		if (flipdata->event_data)
-			flipdata->handler(scrn, flipdata->fe_frame,
-					  flipdata->fe_usec,
-					  flipdata->event_data);
+		if (flipdata->fe_crtc)
+			crtc = flipdata->fe_crtc;
+		flipdata->handler(crtc, flipdata->fe_frame, flipdata->fe_usec,
+				  flipdata->event_data);
 
 		/* Release framebuffer */
-		drmModeRmFB(flipdata->fd, flipdata->old_fb_id);
+		drmModeRmFB(pAMDGPUEnt->fd, flipdata->old_fb_id);
+
+		free(flipdata);
 	}
 
-	drmmode_flip_free(flipcarrier);
+	drmmode_crtc->flip_pending = FALSE;
 }
 
 static void drm_wakeup_handler(pointer data, int err, pointer p)
@@ -1904,6 +2078,9 @@ Bool drmmode_pre_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode, int cpp)
 	int i, num_dvi = 0, num_hdmi = 0;
 	unsigned int crtcs_needed = 0;
 	drmModeResPtr mode_res;
+#ifdef AMDGPU_PIXMAP_SHARING
+	char *bus_id_string, *provider_name;
+#endif
 
 	xf86CrtcConfigInit(pScrn, &drmmode_xf86crtc_config_funcs);
 
@@ -1947,7 +2124,11 @@ Bool drmmode_pre_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode, int cpp)
 	drmmode_clones_init(pScrn, drmmode, mode_res);
 
 #ifdef AMDGPU_PIXMAP_SHARING
-	xf86ProviderSetup(pScrn, NULL, "amdgpu");
+	bus_id_string = DRICreatePCIBusID(info->PciInfo);
+	XNFasprintf(&provider_name, "%s @ %s", pScrn->chipset, bus_id_string);
+	free(bus_id_string);
+	xf86ProviderSetup(pScrn, NULL, provider_name);
+	free(provider_name);
 #endif
 
 	xf86InitialConfiguration(pScrn, TRUE);
@@ -2076,7 +2257,7 @@ Bool drmmode_set_desired_modes(ScrnInfoPtr pScrn, drmmode_ptr drmmode,
 			crtc->rotation = crtc->desiredRotation;
 			crtc->x = crtc->desiredX;
 			crtc->y = crtc->desiredY;
-			if (!xf86CrtcRotate(crtc))
+			if (!drmmode_handle_transform(crtc))
 				return FALSE;
 		}
 	}
@@ -2237,7 +2418,12 @@ restart_destroy:
 	}
 
 	if (changed) {
+#if XORG_VERSION_CURRENT >= XORG_VERSION_NUMERIC(1,14,99,2,0)
 		RRSetChanged(xf86ScrnToScreen(scrn));
+#else
+		rrScrPrivPtr rrScrPriv = rrGetScrPriv(scrn->pScreen);
+		rrScrPriv->changed = TRUE;
+#endif
 		RRTellChanged(xf86ScrnToScreen(scrn));
 	}
 
@@ -2307,35 +2493,24 @@ void drmmode_uevent_fini(ScrnInfoPtr scrn, drmmode_ptr drmmode)
 }
 
 Bool amdgpu_do_pageflip(ScrnInfoPtr scrn, ClientPtr client,
-			struct amdgpu_buffer *new_front, uint64_t id, void *data,
+			PixmapPtr new_front, uint64_t id, void *data,
 			int ref_crtc_hw_id, amdgpu_drm_handler_proc handler,
 			amdgpu_drm_abort_proc abort)
 {
 	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(scrn);
 	xf86CrtcConfigPtr config = XF86_CRTC_CONFIG_PTR(scrn);
+	xf86CrtcPtr crtc = NULL;
 	drmmode_crtc_private_ptr drmmode_crtc = config->crtc[0]->driver_private;
 	drmmode_ptr drmmode = drmmode_crtc->drmmode;
-	unsigned int pitch;
 	int i;
-	int height;
-	drmmode_flipdata_ptr flipdata = NULL;
-	drmmode_flipevtcarrier_ptr flipcarrier = NULL;
-	struct amdgpu_drm_queue_entry *drm_queue = NULL;
-	union gbm_bo_handle bo_handle;
-	uint32_t handle;
+	drmmode_flipdata_ptr flipdata;
+	uintptr_t drm_queue_seq = 0;
+	uint32_t new_front_handle;
 
-	if (new_front->flags & AMDGPU_BO_FLAGS_GBM) {
-		pitch = gbm_bo_get_stride(new_front->bo.gbm);
-		height = gbm_bo_get_height(new_front->bo.gbm);
-		bo_handle = gbm_bo_get_handle(new_front->bo.gbm);
-		handle = bo_handle.u32;
-	} else {
-		pitch = scrn->displayWidth;
-		height = scrn->virtualY;
-		if (amdgpu_bo_export(new_front->bo.amdgpu,
-				amdgpu_bo_handle_type_kms,
-				&handle))
-			goto error;
+	if (!amdgpu_pixmap_get_handle(new_front, &new_front_handle)) {
+		xf86DrvMsg(scrn->scrnIndex, X_WARNING,
+			   "flip queue: data alloc failed.\n");
+		return FALSE;
 	}
 
 	flipdata = calloc(1, sizeof(drmmode_flipdata_rec));
@@ -2349,9 +2524,10 @@ Bool amdgpu_do_pageflip(ScrnInfoPtr scrn, ClientPtr client,
 	 * Create a new handle for the back buffer
 	 */
 	flipdata->old_fb_id = drmmode->fb_id;
-	if (drmModeAddFB(pAMDGPUEnt->fd, scrn->virtualX, height,
-			 scrn->depth, scrn->bitsPerPixel, pitch,
-			 handle, &drmmode->fb_id))
+	if (drmModeAddFB(pAMDGPUEnt->fd, new_front->drawable.width,
+			 new_front->drawable.height, scrn->depth,
+			 scrn->bitsPerPixel, new_front->devKind,
+			 new_front_handle, &drmmode->fb_id))
 		goto error;
 
 	/*
@@ -2365,36 +2541,29 @@ Bool amdgpu_do_pageflip(ScrnInfoPtr scrn, ClientPtr client,
 	 */
 
 	flipdata->event_data = data;
-	flipdata->fd = pAMDGPUEnt->fd;
 	flipdata->handler = handler;
 	flipdata->abort = abort;
 
 	for (i = 0; i < config->num_crtc; i++) {
-		if (!config->crtc[i]->enabled)
+		crtc = config->crtc[i];
+
+		if (!crtc->enabled)
 			continue;
 
 		flipdata->flip_count++;
-		drmmode_crtc = config->crtc[i]->driver_private;
-
-		flipcarrier = calloc(1, sizeof(drmmode_flipevtcarrier_rec));
-		if (!flipcarrier) {
-			xf86DrvMsg(scrn->scrnIndex, X_WARNING,
-				   "flip queue: carrier alloc failed.\n");
-			goto error;
-		}
+		drmmode_crtc = crtc->driver_private;
 
 		/* Only the reference crtc will finally deliver its page flip
 		 * completion event. All other crtc's events will be discarded.
 		 */
-		flipcarrier->dispatch_me =
-		    (drmmode_crtc->hw_id == ref_crtc_hw_id);
-		flipcarrier->flipdata = flipdata;
+		if (drmmode_crtc->hw_id == ref_crtc_hw_id)
+			flipdata->fe_crtc = crtc;
 
-		drm_queue = amdgpu_drm_queue_alloc(scrn, client, id,
-						   flipcarrier,
-						   drmmode_flip_handler,
-						   drmmode_flip_abort);
-		if (!drm_queue) {
+		drm_queue_seq = amdgpu_drm_queue_alloc(crtc, client, id,
+						       flipdata,
+						       drmmode_flip_handler,
+						       drmmode_flip_abort);
+		if (!drm_queue_seq) {
 			xf86DrvMsg(scrn->scrnIndex, X_WARNING,
 				   "Allocating DRM queue event entry failed.\n");
 			goto error;
@@ -2402,13 +2571,13 @@ Bool amdgpu_do_pageflip(ScrnInfoPtr scrn, ClientPtr client,
 
 		if (drmModePageFlip(pAMDGPUEnt->fd, drmmode_crtc->mode_crtc->crtc_id,
 				    drmmode->fb_id, DRM_MODE_PAGE_FLIP_EVENT,
-				    drm_queue)) {
+				    (void*)drm_queue_seq)) {
 			xf86DrvMsg(scrn->scrnIndex, X_WARNING,
 				   "flip queue failed: %s\n", strerror(errno));
 			goto error;
 		}
-		flipcarrier = NULL;
-		drm_queue = NULL;
+		drmmode_crtc->flip_pending = TRUE;
+		drm_queue_seq = 0;
 	}
 
 	if (flipdata->flip_count > 0)
@@ -2420,10 +2589,10 @@ error:
 		drmmode->fb_id = flipdata->old_fb_id;
 	}
 
-	if (drm_queue)
-		amdgpu_drm_abort_entry(drm_queue);
-	else if (flipcarrier)
-		drmmode_flip_abort(scrn, flipcarrier);
+	if (drm_queue_seq)
+		amdgpu_drm_abort_entry(drm_queue_seq);
+	else if (crtc)
+		drmmode_flip_abort(crtc, flipdata);
 	else if (flipdata && flipdata->flip_count <= 1)
 		free(flipdata);
 

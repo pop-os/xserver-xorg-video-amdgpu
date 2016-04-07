@@ -38,11 +38,7 @@
 
 #include <GL/gl.h>
 
-#if HAS_DEVPRIVATEKEYREC
 DevPrivateKeyRec amdgpu_pixmap_index;
-#else
-int amdgpu_pixmap_index;
-#endif
 
 void amdgpu_glamor_exchange_buffers(PixmapPtr src, PixmapPtr dst)
 {
@@ -147,6 +143,41 @@ amdgpu_glamor_create_textured_pixmap(PixmapPtr pixmap, struct amdgpu_pixmap *pri
 						 pixmap->devKind);
 }
 
+static Bool amdgpu_glamor_destroy_pixmap(PixmapPtr pixmap)
+{
+#ifndef HAVE_GLAMOR_EGL_DESTROY_TEXTURED_PIXMAP
+	ScreenPtr screen = pixmap->drawable.pScreen;
+	AMDGPUInfoPtr info = AMDGPUPTR(xf86ScreenToScrn(screen));
+	Bool ret;
+#endif
+
+	if (pixmap->refcnt == 1) {
+		if (pixmap->devPrivate.ptr) {
+			struct amdgpu_buffer *bo = amdgpu_get_pixmap_bo(pixmap);
+
+			if (bo)
+				amdgpu_bo_unmap(bo);
+		}
+
+#ifdef HAVE_GLAMOR_EGL_DESTROY_TEXTURED_PIXMAP
+		glamor_egl_destroy_textured_pixmap(pixmap);
+#endif
+		amdgpu_set_pixmap_bo(pixmap, NULL);
+	}
+
+#ifdef HAVE_GLAMOR_EGL_DESTROY_TEXTURED_PIXMAP
+	fbDestroyPixmap(pixmap);
+	return TRUE;
+#else
+	screen->DestroyPixmap = info->glamor.SavedDestroyPixmap;
+	ret = screen->DestroyPixmap(pixmap);
+	info->glamor.SavedDestroyPixmap = screen->DestroyPixmap;
+	screen->DestroyPixmap = amdgpu_glamor_destroy_pixmap;
+
+	return ret;
+#endif
+}
+
 static PixmapPtr
 amdgpu_glamor_create_pixmap(ScreenPtr screen, int w, int h, int depth,
 			    unsigned usage)
@@ -216,7 +247,9 @@ fallback_glamor:
 		 */
 		xf86DrvMsg(scrn->scrnIndex, X_WARNING,
 			   "Failed to create textured DRI2/PRIME pixmap.");
-		return pixmap;
+
+		amdgpu_glamor_destroy_pixmap(pixmap);
+		return NullPixmap;
 	}
 	/* Create textured pixmap failed means glamor failed to
 	 * create a texture from current BO for some reasons. We turn
@@ -237,23 +270,6 @@ fallback_pixmap:
 		return new_pixmap;
 	else
 		return fbCreatePixmap(screen, w, h, depth, usage);
-}
-
-static Bool amdgpu_glamor_destroy_pixmap(PixmapPtr pixmap)
-{
-	if (pixmap->refcnt == 1) {
-		if (pixmap->devPrivate.ptr) {
-			struct amdgpu_buffer *bo = amdgpu_get_pixmap_bo(pixmap);
-
-			if (bo)
-				amdgpu_bo_unmap(bo);
-		}
-
-		glamor_egl_destroy_textured_pixmap(pixmap);
-		amdgpu_set_pixmap_bo(pixmap, NULL);
-	}
-	fbDestroyPixmap(pixmap);
-	return TRUE;
 }
 
 #ifdef AMDGPU_PIXMAP_SHARING
@@ -335,11 +351,7 @@ Bool amdgpu_glamor_init(ScreenPtr screen)
 			   "Failed to initialize textured pixmap of screen for glamor.\n");
 		return FALSE;
 	}
-#if HAS_DIXREGISTERPRIVATEKEY
 	if (!dixRegisterPrivateKey(&amdgpu_pixmap_index, PRIVATE_PIXMAP, 0))
-#else
-	if (!dixRequestPrivate(&amdgpu_pixmap_index, 0))
-#endif
 		return FALSE;
 
 	if (info->shadow_primary)
@@ -353,10 +365,14 @@ Bool amdgpu_glamor_init(ScreenPtr screen)
 		ps->UnrealizeGlyph = SavedUnrealizeGlyph;
 #endif
 
+	info->glamor.SavedCreatePixmap = screen->CreatePixmap;
 	screen->CreatePixmap = amdgpu_glamor_create_pixmap;
+	info->glamor.SavedDestroyPixmap = screen->DestroyPixmap;
 	screen->DestroyPixmap = amdgpu_glamor_destroy_pixmap;
 #ifdef AMDGPU_PIXMAP_SHARING
+	info->glamor.SavedSharePixmapBacking = screen->SharePixmapBacking;
 	screen->SharePixmapBacking = amdgpu_glamor_share_pixmap_backing;
+	info->glamor.SavedSetSharedPixmapBacking = screen->SetSharedPixmapBacking;
 	screen->SetSharedPixmapBacking =
 	    amdgpu_glamor_set_shared_pixmap_backing;
 #endif
@@ -383,6 +399,22 @@ void amdgpu_glamor_finish(ScrnInfoPtr pScrn)
 		amdgpu_glamor_flush(pScrn);
 		glFinish();
 	}
+}
+
+void
+amdgpu_glamor_fini(ScreenPtr screen)
+{
+	AMDGPUInfoPtr info = AMDGPUPTR(xf86ScreenToScrn(screen));
+
+	if (!info->use_glamor)
+		return;
+
+	screen->CreatePixmap = info->glamor.SavedCreatePixmap;
+	screen->DestroyPixmap = info->glamor.SavedDestroyPixmap;
+#ifdef AMDGPU_PIXMAP_SHARING
+	screen->SharePixmapBacking = info->glamor.SavedSharePixmapBacking;
+	screen->SetSharedPixmapBacking = info->glamor.SavedSetSharedPixmapBacking;
+#endif
 }
 
 XF86VideoAdaptorPtr amdgpu_glamor_xv_init(ScreenPtr pScreen, int num_adapt)
