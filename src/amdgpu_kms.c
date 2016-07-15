@@ -1085,6 +1085,14 @@ static Bool AMDGPUPreInitVisual(ScrnInfoPtr pScrn)
 	case 24:
 		break;
 
+	case 30:
+		if (xorgGetVersion() < XORG_VERSION_NUMERIC(1,19,99,1,0)) {
+			xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+				   "Depth 30 requires Xorg >= 1.19.99.1\n");
+			return FALSE;
+		}
+		break;
+
 	default:
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
 			   "Given depth (%d) is not supported by %s driver\n",

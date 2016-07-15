@@ -18,7 +18,7 @@ following features:
 .PD 0
 .TP 2
 \(bu
-Support for 24-bit pixel depth;
+Support for 24- and 30-bit pixel depths;
 .TP
 \(bu
 RandR support up to version 1.4;

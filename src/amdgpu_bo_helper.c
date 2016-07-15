@@ -42,6 +42,8 @@ amdgpu_get_gbm_format(int depth, int bitsPerPixel)
 		return GBM_FORMAT_RGB565;
 	case 32:
 		return GBM_FORMAT_ARGB8888;
+	case 30:
+		return GBM_FORMAT_XRGB2101010;
 	case 24:
 		if (bitsPerPixel == 32)
 			return GBM_FORMAT_XRGB8888;
