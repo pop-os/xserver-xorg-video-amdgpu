@@ -77,7 +77,7 @@ static const OptionInfoRec *AMDGPUAvailableOptions(int chipid, int busid)
 static void AMDGPUIdentify(int flags)
 {
 	xf86PrintChipsets(AMDGPU_NAME,
-			  "Driver for AMD Radeon chipsets", AMDGPUChipsets);
+			  "Driver for AMD Radeon chipsets", AMDGPUUniqueChipsets);
 }
 
 static char *amdgpu_bus_id(ScrnInfoPtr pScrn, struct pci_device *dev)

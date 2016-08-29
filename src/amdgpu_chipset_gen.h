@@ -193,3 +193,24 @@ SymTabRec AMDGPUChipsets[] = {
   { PCI_CHIP_POLARIS10_67CF, "POLARIS10" },
   { -1,                 NULL }
 };
+
+SymTabRec AMDGPUUniqueChipsets[] = {
+  { 0, "BONAIRE" },
+  { 0, "CARRIZO" },
+  { 0, "FIJI" },
+  { 0, "HAINAN" },
+  { 0, "HAWAII" },
+  { 0, "KABINI" },
+  { 0, "KAVERI" },
+  { 0, "MULLINS" },
+  { 0, "OLAND" },
+  { 0, "PITCAIRN" },
+  { 0, "POLARIS10" },
+  { 0, "POLARIS11" },
+  { 0, "STONEY" },
+  { 0, "TAHITI" },
+  { 0, "TONGA" },
+  { 0, "TOPAZ" },
+  { 0, "VERDE" },
+  { -1,                 NULL }
+};
