@@ -2537,7 +2537,7 @@ Bool amdgpu_do_pageflip(ScrnInfoPtr scrn, ClientPtr client,
 						       flipdata,
 						       drmmode_flip_handler,
 						       drmmode_flip_abort);
-		if (!drm_queue_seq) {
+		if (drm_queue_seq == AMDGPU_DRM_QUEUE_ERROR) {
 			xf86DrvMsg(scrn->scrnIndex, X_WARNING,
 				   "Allocating DRM queue event entry failed.\n");
 			goto error;

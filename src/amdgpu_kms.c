@@ -426,7 +426,7 @@ amdgpu_scanout_update(xf86CrtcPtr xf86_crtc)
 					       drmmode_crtc,
 					       amdgpu_scanout_update_handler,
 					       amdgpu_scanout_update_abort);
-	if (!drm_queue_seq) {
+	if (drm_queue_seq == AMDGPU_DRM_QUEUE_ERROR) {
 		xf86DrvMsg(scrn->scrnIndex, X_WARNING,
 			   "amdgpu_drm_queue_alloc failed for scanout update\n");
 		return;
@@ -480,7 +480,7 @@ amdgpu_scanout_flip(ScreenPtr pScreen, AMDGPUInfoPtr info,
 					       AMDGPU_DRM_QUEUE_ID_DEFAULT,
 					       drmmode_crtc, NULL,
 					       amdgpu_scanout_flip_abort);
-	if (!drm_queue_seq) {
+	if (drm_queue_seq == AMDGPU_DRM_QUEUE_ERROR) {
 		xf86DrvMsg(scrn->scrnIndex, X_WARNING,
 			   "Allocating DRM event queue entry failed.\n");
 		return;

@@ -1035,7 +1035,7 @@ static int amdgpu_dri2_schedule_wait_msc(ClientPtr client, DrawablePtr draw,
 	drm_queue_seq = amdgpu_drm_queue_alloc(crtc, client, AMDGPU_DRM_QUEUE_ID_DEFAULT,
 					       wait_info, amdgpu_dri2_frame_event_handler,
 					       amdgpu_dri2_frame_event_abort);
-	if (!drm_queue_seq) {
+	if (drm_queue_seq == AMDGPU_DRM_QUEUE_ERROR) {
 		xf86DrvMsg(scrn->scrnIndex, X_WARNING,
 			   "Allocating DRM queue event entry failed.\n");
 		goto out_complete;
@@ -1183,7 +1183,7 @@ static int amdgpu_dri2_schedule_swap(ClientPtr client, DrawablePtr draw,
 	drm_queue_seq = amdgpu_drm_queue_alloc(crtc, client, AMDGPU_DRM_QUEUE_ID_DEFAULT,
 					       swap_info, amdgpu_dri2_frame_event_handler,
 					       amdgpu_dri2_frame_event_abort);
-	if (!drm_queue_seq) {
+	if (drm_queue_seq == AMDGPU_DRM_QUEUE_ERROR) {
 		xf86DrvMsg(scrn->scrnIndex, X_WARNING,
 			   "Allocating DRM queue entry failed.\n");
 		goto blit_fallback;
