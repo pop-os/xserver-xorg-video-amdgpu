@@ -366,7 +366,7 @@ amdgpu_scanout_do_update(xf86CrtcPtr xf86_crtc, int scanout_id)
 	BoxRec extents;
 
 	if (!xf86_crtc->enabled ||
-	    drmmode_crtc->dpms_mode != DPMSModeOn ||
+	    drmmode_crtc->pending_dpms_mode != DPMSModeOn ||
 	    !drmmode_crtc->scanout[scanout_id].pixmap)
 		return FALSE;
 
@@ -485,7 +485,7 @@ amdgpu_scanout_update(xf86CrtcPtr xf86_crtc)
 	if (!xf86_crtc->enabled ||
 	    drmmode_crtc->scanout_update_pending ||
 	    !drmmode_crtc->scanout[0].pixmap ||
-	    drmmode_crtc->dpms_mode != DPMSModeOn)
+	    drmmode_crtc->pending_dpms_mode != DPMSModeOn)
 		return;
 
 	pDamage = drmmode_crtc->scanout[0].damage;
@@ -537,7 +537,7 @@ amdgpu_scanout_flip_abort(xf86CrtcPtr crtc, void *event_data)
 	drmmode_crtc_private_ptr drmmode_crtc = event_data;
 
 	drmmode_crtc->scanout_update_pending = FALSE;
-	drmmode_crtc->flip_pending = FALSE;
+	drmmode_clear_pending_flip(crtc);
 }
 
 static void
