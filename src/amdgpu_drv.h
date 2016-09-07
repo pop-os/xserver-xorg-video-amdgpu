@@ -185,6 +185,10 @@ struct amdgpu_buffer {
 	uint32_t flags;
 };
 
+struct amdgpu_client_priv {
+	uint_fast32_t needs_flush;
+};
+
 typedef struct {
 	EntityInfoPtr pEnt;
 	pciVideoPtr PciInfo;
@@ -210,7 +214,6 @@ typedef struct {
 	/* accel */
 	PixmapPtr fbcon_pixmap;
 	int callback_event_type;
-	uint_fast32_t callback_needs_flush;
 	uint_fast32_t gpu_flushed;
 	uint_fast32_t gpu_synced;
 	Bool use_glamor;
