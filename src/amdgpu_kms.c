@@ -50,6 +50,8 @@
 #include <X11/extensions/dpms.h>
 #endif
 
+#include <X11/extensions/damageproto.h>
+
 #include "amdgpu_chipinfo_gen.h"
 #include "amdgpu_bo_helper.h"
 #include "amdgpu_pixmap.h"
@@ -163,8 +165,51 @@ amdgpuUpdatePacked(ScreenPtr pScreen, shadowBufPtr pBuf)
 	shadowUpdatePacked(pScreen, pBuf);
 }
 
+static Bool
+callback_needs_flush(AMDGPUInfoPtr info)
+{
+	return (int)(info->callback_needs_flush - info->gpu_flushed) > 0;
+}
+
+static void
+amdgpu_event_callback(CallbackListPtr *list,
+		      pointer user_data, pointer call_data)
+{
+	EventInfoRec *eventinfo = call_data;
+	ScrnInfoPtr pScrn = user_data;
+	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
+	int i;
+
+	if (callback_needs_flush(info))
+		return;
+
+	/* Don't let gpu_flushed get too far ahead of callback_needs_flush,
+	 * in order to prevent false positives in callback_needs_flush()
+	 */
+	info->callback_needs_flush = info->gpu_flushed;
+	
+	for (i = 0; i < eventinfo->count; i++) {
+		if (eventinfo->events[i].u.u.type == info->callback_event_type) {
+			info->callback_needs_flush++;
+			return;
+		}
+	}
+}
+
+static void
+amdgpu_flush_callback(CallbackListPtr *list,
+		      pointer user_data, pointer call_data)
+{
+	ScrnInfoPtr pScrn = user_data;
+	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
+
+	if (pScrn->vtSema && callback_needs_flush(info))
+		amdgpu_glamor_flush(pScrn);
+}
+
 static Bool AMDGPUCreateScreenResources_KMS(ScreenPtr pScreen)
 {
+	ExtensionEntry *damage_ext = CheckExtension("DAMAGE");
 	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
 	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
 	PixmapPtr pixmap;
@@ -216,6 +261,19 @@ static Bool AMDGPUCreateScreenResources_KMS(ScreenPtr pScreen)
 
 	if (info->use_glamor)
 		amdgpu_glamor_create_screen_resources(pScreen);
+
+	info->callback_event_type = -1;
+	if (damage_ext) {
+		info->callback_event_type = damage_ext->eventBase + XDamageNotify;
+
+		if (!AddCallback(&FlushCallback, amdgpu_flush_callback, pScrn))
+			return FALSE;
+
+		if (!AddCallback(&EventCallback, amdgpu_event_callback, pScrn)) {
+			DeleteCallback(&FlushCallback, amdgpu_flush_callback, pScrn);
+			return FALSE;
+		}
+	}
 
 	return TRUE;
 }
@@ -540,17 +598,6 @@ static void AMDGPUBlockHandler_oneshot(BLOCKHANDLER_ARGS_DECL)
 	AMDGPUBlockHandler_KMS(BLOCKHANDLER_ARGS);
 
 	drmmode_set_desired_modes(pScrn, &info->drmmode, TRUE);
-}
-
-static void
-amdgpu_flush_callback(CallbackListPtr * list,
-		      pointer user_data, pointer call_data)
-{
-	ScrnInfoPtr pScrn = user_data;
-
-	if (pScrn->vtSema) {
-		amdgpu_glamor_flush(pScrn);
-	}
 }
 
 /* This is called by AMDGPUPreInit to set up the default visual */
@@ -1108,7 +1155,10 @@ static Bool AMDGPUCloseScreen_KMS(CLOSE_SCREEN_ARGS_DECL)
 	drmmode_uevent_fini(pScrn, &info->drmmode);
 	amdgpu_drm_queue_close(pScrn);
 
-	DeleteCallback(&FlushCallback, amdgpu_flush_callback, pScrn);
+	if (info->callback_event_type != -1) {
+		DeleteCallback(&EventCallback, amdgpu_event_callback, pScrn);
+		DeleteCallback(&FlushCallback, amdgpu_flush_callback, pScrn);
+	}
 
 	amdgpu_sync_close(pScreen);
 	amdgpu_drop_drm_master(pScrn);
@@ -1346,9 +1396,6 @@ Bool AMDGPUScreenInit_KMS(SCREEN_INIT_ARGS_DECL)
 	pScreen->SaveScreen = AMDGPUSaveScreen_KMS;
 	info->BlockHandler = pScreen->BlockHandler;
 	pScreen->BlockHandler = AMDGPUBlockHandler_oneshot;
-
-	if (!AddCallback(&FlushCallback, amdgpu_flush_callback, pScrn))
-		return FALSE;
 
 	info->CreateScreenResources = pScreen->CreateScreenResources;
 	pScreen->CreateScreenResources = AMDGPUCreateScreenResources_KMS;

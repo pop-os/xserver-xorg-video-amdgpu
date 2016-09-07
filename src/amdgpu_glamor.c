@@ -460,8 +460,9 @@ void amdgpu_glamor_flush(ScrnInfoPtr pScrn)
 
 	if (info->use_glamor) {
 		glamor_block_handler(pScrn->pScreen);
-		info->gpu_flushed++;
 	}
+
+	info->gpu_flushed++;
 }
 
 void amdgpu_glamor_finish(ScrnInfoPtr pScrn)

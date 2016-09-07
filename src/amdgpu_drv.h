@@ -209,6 +209,8 @@ typedef struct {
 
 	/* accel */
 	PixmapPtr fbcon_pixmap;
+	int callback_event_type;
+	uint_fast32_t callback_needs_flush;
 	uint_fast32_t gpu_flushed;
 	uint_fast32_t gpu_synced;
 	Bool use_glamor;
