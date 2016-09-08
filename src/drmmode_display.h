@@ -73,7 +73,6 @@ typedef struct {
 struct drmmode_scanout {
 	struct amdgpu_buffer *bo;
 	PixmapPtr pixmap;
-	DamagePtr damage;
 	unsigned fb_id;
 	int width, height;
 };
@@ -85,6 +84,8 @@ typedef struct {
 	struct amdgpu_buffer *cursor_buffer;
 	struct drmmode_scanout rotate;
 	struct drmmode_scanout scanout[2];
+	DamagePtr scanout_damage;
+	RegionRec scanout_last_region;
 	unsigned scanout_id;
 	Bool scanout_update_pending;
 	int dpms_mode;
