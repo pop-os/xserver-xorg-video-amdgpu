@@ -304,8 +304,10 @@ static Bool AMDGPUCreateScreenResources_KMS(ScreenPtr pScreen)
 }
 
 #ifdef AMDGPU_PIXMAP_SHARING
-static void redisplay_dirty(ScreenPtr screen, PixmapDirtyUpdatePtr dirty)
+static void
+redisplay_dirty(PixmapDirtyUpdatePtr dirty)
 {
+	ScrnInfoPtr scrn = xf86ScreenToScrn(dirty->src->drawable.pScreen);
 	RegionRec pixregion;
 
 	PixmapRegionInit(&pixregion, dirty->slave_dst);
@@ -316,8 +318,94 @@ static void redisplay_dirty(ScreenPtr screen, PixmapDirtyUpdatePtr dirty)
 	PixmapSyncDirtyHelper(dirty, &pixregion);
 #endif
 
+	amdgpu_glamor_flush(scrn);
 	DamageRegionProcessPending(&dirty->slave_dst->drawable);
 	RegionUninit(&pixregion);
+
+	DamageEmpty(dirty->damage);
+}
+
+static void
+amdgpu_prime_scanout_update_abort(xf86CrtcPtr crtc, void *event_data)
+{
+	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
+
+	drmmode_crtc->scanout_update_pending = FALSE;
+}
+
+void
+amdgpu_prime_scanout_update_handler(xf86CrtcPtr crtc, uint32_t frame, uint64_t usec,
+				    void *event_data)
+{
+	ScrnInfoPtr scrn = crtc->scrn;
+	ScreenPtr screen = scrn->pScreen;
+	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
+	PixmapPtr scanoutpix = crtc->randr_crtc->scanout_pixmap;
+	PixmapDirtyUpdatePtr dirty;
+
+	xorg_list_for_each_entry(dirty, &screen->pixmap_dirty_list, ent) {
+		if (dirty->src == scanoutpix &&
+		    dirty->slave_dst == drmmode_crtc->scanout[0].pixmap) {
+			redisplay_dirty(dirty);
+			break;
+		}
+	}
+
+	drmmode_crtc->scanout_update_pending = FALSE;
+}
+
+static void
+amdgpu_prime_scanout_update(PixmapDirtyUpdatePtr dirty)
+{
+	ScreenPtr screen = dirty->slave_dst->drawable.pScreen;
+	ScrnInfoPtr scrn = xf86ScreenToScrn(screen);
+	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(scrn);
+	xf86CrtcConfigPtr xf86_config = XF86_CRTC_CONFIG_PTR(scrn);
+	xf86CrtcPtr xf86_crtc = NULL;
+	drmmode_crtc_private_ptr drmmode_crtc = NULL;
+	uintptr_t drm_queue_seq;
+	drmVBlank vbl;
+	int c;
+
+	/* Find the CRTC which is scanning out from this slave pixmap */
+	for (c = 0; c < xf86_config->num_crtc; c++) {
+		xf86_crtc = xf86_config->crtc[c];
+		drmmode_crtc = xf86_crtc->driver_private;
+		if (drmmode_crtc->scanout[0].pixmap == dirty->slave_dst)
+			break;
+	}
+
+	if (c == xf86_config->num_crtc ||
+	    !xf86_crtc->enabled ||
+	    drmmode_crtc->scanout_update_pending ||
+	    !drmmode_crtc->scanout[0].pixmap ||
+	    drmmode_crtc->pending_dpms_mode != DPMSModeOn)
+		return;
+
+	drm_queue_seq = amdgpu_drm_queue_alloc(xf86_crtc,
+					       AMDGPU_DRM_QUEUE_CLIENT_DEFAULT,
+					       AMDGPU_DRM_QUEUE_ID_DEFAULT, NULL,
+					       amdgpu_prime_scanout_update_handler,
+					       amdgpu_prime_scanout_update_abort);
+	if (drm_queue_seq == AMDGPU_DRM_QUEUE_ERROR) {
+		xf86DrvMsg(scrn->scrnIndex, X_WARNING,
+			   "amdgpu_drm_queue_alloc failed for PRIME update\n");
+		return;
+	}
+
+	vbl.request.type = DRM_VBLANK_RELATIVE | DRM_VBLANK_EVENT;
+	vbl.request.type |= amdgpu_populate_vbl_request_type(xf86_crtc);
+	vbl.request.sequence = 1;
+	vbl.request.signal = drm_queue_seq;
+	if (drmWaitVBlank(pAMDGPUEnt->fd, &vbl)) {
+		xf86DrvMsg(scrn->scrnIndex, X_WARNING,
+			   "drmWaitVBlank failed for PRIME update: %s\n",
+			   strerror(errno));
+		amdgpu_drm_abort_entry(drm_queue_seq);
+		return;
+	}
+
+	drmmode_crtc->scanout_update_pending = TRUE;
 }
 
 static void amdgpu_dirty_update(ScreenPtr screen)
@@ -331,8 +419,10 @@ static void amdgpu_dirty_update(ScreenPtr screen)
 	xorg_list_for_each_entry(ent, &screen->pixmap_dirty_list, ent) {
 		region = DamageRegion(ent->damage);
 		if (RegionNotEmpty(region)) {
-			redisplay_dirty(screen, ent);
-			DamageEmpty(ent->damage);
+			if (screen->isGPU)
+				amdgpu_prime_scanout_update(ent);
+			else
+				redisplay_dirty(ent);
 		}
 	}
 }
