@@ -94,7 +94,6 @@ typedef struct {
 	uint32_t dpms_last_seq;
 	int dpms_last_fps;
 	uint32_t interpolated_vblanks;
-	int prime_pixmap_x;
 
 	/* Modeset needed for DPMS on */
 	Bool need_modeset;

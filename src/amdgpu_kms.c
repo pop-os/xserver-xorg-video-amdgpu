@@ -595,15 +595,20 @@ static void AMDGPUBlockHandler_KMS(BLOCKHANDLER_ARGS_DECL)
 	(*pScreen->BlockHandler) (BLOCKHANDLER_ARGS);
 	pScreen->BlockHandler = AMDGPUBlockHandler_KMS;
 
-	for (c = 0; c < xf86_config->num_crtc; c++) {
-		if (info->tear_free)
-			amdgpu_scanout_flip(pScreen, info, xf86_config->crtc[c]);
-		else if (info->shadow_primary
-#if XF86_CRTC_VERSION >= 4
-				 || xf86_config->crtc[c]->driverIsPerformingTransform
+#ifdef AMDGPU_PIXMAP_SHARING
+	if (!pScreen->isGPU)
 #endif
-			)
-			amdgpu_scanout_update(xf86_config->crtc[c]);
+	{
+		for (c = 0; c < xf86_config->num_crtc; c++) {
+			if (info->tear_free)
+				amdgpu_scanout_flip(pScreen, info, xf86_config->crtc[c]);
+			else if (info->shadow_primary
+#if XF86_CRTC_VERSION >= 4
+					 || xf86_config->crtc[c]->driverIsPerformingTransform
+#endif
+				)
+				amdgpu_scanout_update(xf86_config->crtc[c]);
+		}
 	}
 
 	if (info->use_glamor)
