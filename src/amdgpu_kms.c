@@ -507,31 +507,56 @@ slave_has_sync_shared_pixmap(ScrnInfoPtr scrn, PixmapDirtyUpdatePtr dirty)
 	return slave_scrn->driverName == scrn->driverName;
 }
 
-void
-amdgpu_prime_scanout_update_handler(xf86CrtcPtr crtc, uint32_t frame, uint64_t usec,
-				    void *event_data)
+static Bool
+amdgpu_prime_scanout_do_update(xf86CrtcPtr crtc, unsigned scanout_id)
 {
 	ScrnInfoPtr scrn = crtc->scrn;
 	ScreenPtr screen = scrn->pScreen;
+	AMDGPUInfoPtr info = AMDGPUPTR(scrn);
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
 	PixmapPtr scanoutpix = crtc->randr_crtc->scanout_pixmap;
 	PixmapDirtyUpdatePtr dirty;
+	Bool ret = FALSE;
 
 	xorg_list_for_each_entry(dirty, &screen->pixmap_dirty_list, ent) {
-		if (dirty->src == scanoutpix &&
-		    dirty->slave_dst == drmmode_crtc->scanout[0].pixmap) {
+		if (dirty->src == scanoutpix && dirty->slave_dst ==
+		    drmmode_crtc->scanout[scanout_id ^ info->tear_free].pixmap) {
 			RegionPtr region;
 
 			if (master_has_sync_shared_pixmap(scrn, dirty))
 				amdgpu_sync_shared_pixmap(dirty);
 
 			region = dirty_region(dirty);
+			if (RegionNil(region))
+				goto destroy;
+
+			if (info->tear_free) {
+				RegionTranslate(region, crtc->x, crtc->y);
+				amdgpu_sync_scanout_pixmaps(crtc, region, scanout_id);
+				amdgpu_glamor_flush(scrn);
+				RegionCopy(&drmmode_crtc->scanout_last_region, region);
+				RegionTranslate(region, -crtc->x, -crtc->y);
+				dirty->slave_dst = drmmode_crtc->scanout[scanout_id].pixmap;
+			}
+
 			redisplay_dirty(dirty, region);
+			ret = TRUE;
+		destroy:
 			RegionDestroy(region);
 			break;
 		}
 	}
 
+	return ret;
+}
+
+void
+amdgpu_prime_scanout_update_handler(xf86CrtcPtr crtc, uint32_t frame, uint64_t usec,
+				     void *event_data)
+{
+	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
+
+	amdgpu_prime_scanout_do_update(crtc, 0);
 	drmmode_crtc->scanout_update_pending = FALSE;
 }
 
@@ -590,8 +615,75 @@ amdgpu_prime_scanout_update(PixmapDirtyUpdatePtr dirty)
 }
 
 static void
+amdgpu_prime_scanout_flip_abort(xf86CrtcPtr crtc, void *event_data)
+{
+	drmmode_crtc_private_ptr drmmode_crtc = event_data;
+
+	drmmode_crtc->scanout_update_pending = FALSE;
+	drmmode_clear_pending_flip(crtc);
+}
+
+static void
+amdgpu_prime_scanout_flip(PixmapDirtyUpdatePtr ent)
+{
+	ScreenPtr screen = ent->slave_dst->drawable.pScreen;
+	ScrnInfoPtr scrn = xf86ScreenToScrn(screen);
+	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(scrn);
+	xf86CrtcConfigPtr xf86_config = XF86_CRTC_CONFIG_PTR(scrn);
+	xf86CrtcPtr crtc = NULL;
+	drmmode_crtc_private_ptr drmmode_crtc = NULL;
+	uintptr_t drm_queue_seq;
+	unsigned scanout_id;
+	int c;
+
+	/* Find the CRTC which is scanning out from this slave pixmap */
+	for (c = 0; c < xf86_config->num_crtc; c++) {
+		crtc = xf86_config->crtc[c];
+		drmmode_crtc = crtc->driver_private;
+		scanout_id = drmmode_crtc->scanout_id;
+		if (drmmode_crtc->scanout[scanout_id].pixmap == ent->slave_dst)
+			break;
+	}
+
+	if (c == xf86_config->num_crtc ||
+	    !crtc->enabled ||
+	    drmmode_crtc->scanout_update_pending ||
+	    !drmmode_crtc->scanout[drmmode_crtc->scanout_id].pixmap ||
+	    drmmode_crtc->pending_dpms_mode != DPMSModeOn)
+		return;
+
+	scanout_id = drmmode_crtc->scanout_id ^ 1;
+	if (!amdgpu_prime_scanout_do_update(crtc, scanout_id))
+		return;
+
+	drm_queue_seq = amdgpu_drm_queue_alloc(crtc,
+					       AMDGPU_DRM_QUEUE_CLIENT_DEFAULT,
+					       AMDGPU_DRM_QUEUE_ID_DEFAULT,
+					       drmmode_crtc, NULL,
+					       amdgpu_prime_scanout_flip_abort);
+	if (drm_queue_seq == AMDGPU_DRM_QUEUE_ERROR) {
+		xf86DrvMsg(scrn->scrnIndex, X_WARNING,
+			   "Allocating DRM event queue entry failed for PRIME flip.\n");
+		return;
+	}
+
+	if (drmModePageFlip(pAMDGPUEnt->fd, drmmode_crtc->mode_crtc->crtc_id,
+			    drmmode_crtc->scanout[scanout_id].fb_id,
+			    DRM_MODE_PAGE_FLIP_EVENT, (void*)drm_queue_seq)) {
+		xf86DrvMsg(scrn->scrnIndex, X_WARNING, "flip queue failed in %s: %s\n",
+			   __func__, strerror(errno));
+		return;
+	}
+
+	drmmode_crtc->scanout_id = scanout_id;
+	drmmode_crtc->scanout_update_pending = TRUE;
+	drmmode_crtc->flip_pending = TRUE;
+}
+
+static void
 amdgpu_dirty_update(ScrnInfoPtr scrn)
 {
+	AMDGPUInfoPtr info = AMDGPUPTR(scrn);
 	ScreenPtr screen = scrn->pScreen;
 	PixmapDirtyUpdatePtr ent;
 	RegionPtr region;
@@ -611,10 +703,14 @@ amdgpu_dirty_update(ScrnInfoPtr scrn)
 
 			region = dirty_region(region_ent);
 
-			if (RegionNotEmpty(region))
-				amdgpu_prime_scanout_update(ent);
-			else
+			if (RegionNotEmpty(region)) {
+				if (info->tear_free)
+					amdgpu_prime_scanout_flip(ent);
+				else
+					amdgpu_prime_scanout_update(ent);
+			} else {
 				DamageEmpty(region_ent->damage);
+			}
 
 			RegionDestroy(region);
 		} else {
