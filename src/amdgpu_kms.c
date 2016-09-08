@@ -303,6 +303,23 @@ static Bool AMDGPUCreateScreenResources_KMS(ScreenPtr pScreen)
 	return TRUE;
 }
 
+static Bool
+amdgpu_scanout_extents_intersect(xf86CrtcPtr xf86_crtc, BoxPtr extents)
+{
+	extents->x1 -= xf86_crtc->filter_width >> 1;
+	extents->x2 += xf86_crtc->filter_width >> 1;
+	extents->y1 -= xf86_crtc->filter_height >> 1;
+	extents->y2 += xf86_crtc->filter_height >> 1;
+	pixman_f_transform_bounds(&xf86_crtc->f_framebuffer_to_crtc, extents);
+
+	extents->x1 = max(extents->x1, 0);
+	extents->y1 = max(extents->y1, 0);
+	extents->x2 = min(extents->x2, xf86_crtc->mode.HDisplay);
+	extents->y2 = min(extents->y2, xf86_crtc->mode.VDisplay);
+
+	return (extents->x1 < extents->x2 && extents->y1 < extents->y2);
+}
+
 #ifdef AMDGPU_PIXMAP_SHARING
 
 static RegionPtr
@@ -557,23 +574,6 @@ amdgpu_dirty_update(ScrnInfoPtr scrn)
 	}
 }
 #endif
-
-static Bool
-amdgpu_scanout_extents_intersect(xf86CrtcPtr xf86_crtc, BoxPtr extents)
-{
-	extents->x1 -= xf86_crtc->filter_width >> 1;
-	extents->x2 += xf86_crtc->filter_width >> 1;
-	extents->y1 -= xf86_crtc->filter_height >> 1;
-	extents->y2 += xf86_crtc->filter_height >> 1;
-	pixman_f_transform_bounds(&xf86_crtc->f_framebuffer_to_crtc, extents);
-
-	extents->x1 = max(extents->x1, 0);
-	extents->y1 = max(extents->y1, 0);
-	extents->x2 = min(extents->x2, xf86_crtc->mode.HDisplay);
-	extents->y2 = min(extents->y2, xf86_crtc->mode.VDisplay);
-
-	return (extents->x1 < extents->x2 && extents->y1 < extents->y2);
-}
 
 static Bool
 amdgpu_scanout_do_update(xf86CrtcPtr xf86_crtc, int scanout_id)
