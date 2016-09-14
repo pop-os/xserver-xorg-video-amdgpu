@@ -278,12 +278,17 @@ static Bool
 amdgpu_glamor_share_pixmap_backing(PixmapPtr pixmap, ScreenPtr slave,
 				   void **handle_p)
 {
-	struct amdgpu_pixmap *priv = amdgpu_get_pixmap_private(pixmap);
+	ScreenPtr screen = pixmap->drawable.pScreen;
+	CARD16 stride;
+	CARD32 size;
+	int fd;
 
-	if (!priv)
+	fd = glamor_fd_from_pixmap(screen, pixmap, &stride, &size);
+	if (fd < 0)
 		return FALSE;
 
-	return amdgpu_share_pixmap_backing(priv->bo, handle_p);
+	*handle_p = (void *)(long)fd;
+	return TRUE;
 }
 
 static Bool
