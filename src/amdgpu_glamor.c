@@ -327,9 +327,30 @@ amdgpu_glamor_share_pixmap_backing(PixmapPtr pixmap, ScreenPtr slave,
 				   void **handle_p)
 {
 	ScreenPtr screen = pixmap->drawable.pScreen;
+	uint64_t tiling_info;
 	CARD16 stride;
 	CARD32 size;
 	int fd;
+
+	tiling_info = amdgpu_pixmap_get_tiling_info(pixmap);
+	if (AMDGPU_TILING_GET(tiling_info, ARRAY_MODE) != 0) {
+		PixmapPtr linear;
+
+		/* We don't want to re-allocate the screen pixmap as
+		 * linear, to avoid trouble with page flipping
+		 */
+		if (screen->GetScreenPixmap(screen) == pixmap)
+			return FALSE;
+
+		linear = screen->CreatePixmap(screen, pixmap->drawable.width,
+					      pixmap->drawable.height,
+					      pixmap->drawable.depth,
+					      CREATE_PIXMAP_USAGE_SHARED);
+		if (!linear)
+			return FALSE;
+
+		amdgpu_glamor_set_pixmap_bo(&pixmap->drawable, linear);
+	}
 
 	fd = glamor_fd_from_pixmap(screen, pixmap, &stride, &size);
 	if (fd < 0)
