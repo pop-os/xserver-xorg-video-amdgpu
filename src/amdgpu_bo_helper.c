@@ -345,21 +345,6 @@ struct amdgpu_buffer *amdgpu_gem_bo_open_prime(amdgpu_device_handle pDev,
 
 #ifdef AMDGPU_PIXMAP_SHARING
 
-Bool amdgpu_share_pixmap_backing(struct amdgpu_buffer *bo, void **handle_p)
-{
-	int handle;
-
-	if (bo->flags & AMDGPU_BO_FLAGS_GBM)
-		handle = gbm_bo_get_fd(bo->bo.gbm);
-	else
-		amdgpu_bo_export(bo->bo.amdgpu,
-			 amdgpu_bo_handle_type_dma_buf_fd,
-			 (uint32_t *)&handle);
-
-	*handle_p = (void *)(long)handle;
-	return TRUE;
-}
-
 Bool amdgpu_set_shared_pixmap_backing(PixmapPtr ppix, void *fd_handle)
 {
 	ScrnInfoPtr pScrn = xf86ScreenToScrn(ppix->drawable.pScreen);

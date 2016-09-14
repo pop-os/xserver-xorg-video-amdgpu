@@ -37,8 +37,6 @@ extern int amdgpu_bo_map(ScrnInfoPtr pScrn, struct amdgpu_buffer *bo);
 
 extern void amdgpu_bo_unmap(struct amdgpu_buffer *bo);
 
-extern Bool amdgpu_share_pixmap_backing(struct amdgpu_buffer *bo, void **handle_p);
-
 extern Bool
 amdgpu_set_shared_pixmap_backing(PixmapPtr ppix, void *fd_handle);
 
