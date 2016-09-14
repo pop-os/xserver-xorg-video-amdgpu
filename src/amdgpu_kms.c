@@ -758,8 +758,11 @@ static void AMDGPUSetupCapabilities(ScrnInfoPtr pScrn)
 	if (ret == 0) {
 		if (value & DRM_PRIME_CAP_EXPORT)
 			pScrn->capabilities |= RR_Capability_SourceOutput | RR_Capability_SinkOffload;
-		if (value & DRM_PRIME_CAP_IMPORT)
-			pScrn->capabilities |= RR_Capability_SinkOutput | RR_Capability_SourceOffload;
+		if (value & DRM_PRIME_CAP_IMPORT) {
+			pScrn->capabilities |= RR_Capability_SourceOffload;
+			if (info->drmmode.count_crtcs)
+				pScrn->capabilities |= RR_Capability_SinkOutput;
+		}
 	}
 #endif
 }
@@ -873,8 +876,6 @@ Bool AMDGPUPreInit_KMS(ScrnInfoPtr pScrn, int flags)
 
 	amdgpu_drm_queue_init();
 
-	AMDGPUSetupCapabilities(pScrn);
-
 	/* don't enable tiling if accel is not enabled */
 	if (info->use_glamor) {
 		/* set default group bytes, overridden by kernel info below */
@@ -927,6 +928,8 @@ Bool AMDGPUPreInit_KMS(ScrnInfoPtr pScrn, int flags)
 			   "Kernel modesetting setup failed\n");
 		goto fail;
 	}
+
+	AMDGPUSetupCapabilities(pScrn);
 
 	if (info->drmmode.count_crtcs == 1)
 		pAMDGPUEnt->HasCRTC2 = FALSE;
