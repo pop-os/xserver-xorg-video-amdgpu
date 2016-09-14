@@ -104,4 +104,20 @@ struct amdgpu_buffer *amdgpu_gem_bo_open_prime(amdgpu_device_handle pDev,
                                                  int fd_handle,
                                                  uint32_t size);
 
+/**
+ * get_drawable_pixmap() returns the backing pixmap for a given drawable.
+ *
+ * @param drawable the drawable being requested.
+ *
+ * This function returns the backing pixmap for a drawable, whether it is a
+ * redirected window, unredirected window, or already a pixmap.
+ */
+static inline PixmapPtr get_drawable_pixmap(DrawablePtr drawable)
+{
+	if (drawable->type == DRAWABLE_PIXMAP)
+		return (PixmapPtr)drawable;
+	else
+		return drawable->pScreen->GetWindowPixmap((WindowPtr)drawable);
+}
+
 #endif /* AMDGPU_BO_HELPER_H */

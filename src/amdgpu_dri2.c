@@ -98,15 +98,6 @@ amdgpu_get_flink_name(AMDGPUEntPtr pAMDGPUEnt, PixmapPtr pixmap, uint32_t *name)
 	return TRUE;
 }
 
-static PixmapPtr get_drawable_pixmap(DrawablePtr drawable)
-{
-	if (drawable->type == DRAWABLE_PIXMAP)
-		return (PixmapPtr) drawable;
-	else
-		return (*drawable->pScreen->
-			GetWindowPixmap) ((WindowPtr) drawable);
-}
-
 static PixmapPtr fixup_glamor(DrawablePtr drawable, PixmapPtr pixmap)
 {
 	PixmapPtr old = get_drawable_pixmap(drawable);
