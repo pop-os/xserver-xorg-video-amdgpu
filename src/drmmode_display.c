@@ -2407,7 +2407,8 @@ restart_destroy:
 			xf86CrtcConfigPtr loop_config =
 				XF86_CRTC_CONFIG_PTR(loop_scrn);
 
-			if (AMDGPUEntPriv(loop_scrn) != pAMDGPUEnt)
+			if (strcmp(loop_scrn->driverName, scrn->driverName) ||
+			    AMDGPUEntPriv(loop_scrn) != pAMDGPUEnt)
 				continue;
 
 			for (j = 0; !found && j < loop_config->num_output; j++) {
