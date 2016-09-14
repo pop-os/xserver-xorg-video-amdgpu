@@ -2160,8 +2160,10 @@ void drmmode_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode)
 
 void drmmode_fini(ScrnInfoPtr pScrn, drmmode_ptr drmmode)
 {
+	xf86CrtcConfigPtr config = XF86_CRTC_CONFIG_PTR(pScrn);
 	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(pScrn);
 	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
+	int c;
 
 	if (!info->drmmode_inited)
 		return;
@@ -2171,6 +2173,14 @@ void drmmode_fini(ScrnInfoPtr pScrn, drmmode_ptr drmmode)
 		RemoveGeneralSocket(pAMDGPUEnt->fd);
 		RemoveBlockAndWakeupHandlers((BlockHandlerProcPtr) NoopDDA,
 					     drm_wakeup_handler, drmmode);
+	}
+
+	for (c = 0; c < config->num_crtc; c++) {
+		xf86CrtcPtr crtc = config->crtc[c];
+		drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
+
+		drmmode_crtc_scanout_destroy(&info->drmmode, &drmmode_crtc->scanout[0]);
+		drmmode_crtc_scanout_destroy(&info->drmmode, &drmmode_crtc->scanout[1]);
 	}
 }
 
