@@ -32,6 +32,8 @@ struct amdgpu_pixmap {
 	uint_fast32_t gpu_read;
 	uint_fast32_t gpu_write;
 
+	uint64_t tiling_info;
+
 	struct amdgpu_buffer *bo;
 
 	/* GEM handle for pixmaps shared via DRI2/3 */

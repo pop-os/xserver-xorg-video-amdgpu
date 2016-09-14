@@ -31,6 +31,8 @@ extern struct amdgpu_buffer *amdgpu_alloc_pixmap_bo(ScrnInfoPtr pScrn, int width
 
 extern Bool amdgpu_bo_get_handle(struct amdgpu_buffer *bo, uint32_t *handle);
 
+extern uint64_t amdgpu_pixmap_get_tiling_info(PixmapPtr pixmap);
+
 extern Bool amdgpu_pixmap_get_handle(PixmapPtr pixmap, uint32_t *handle);
 
 extern int amdgpu_bo_map(ScrnInfoPtr pScrn, struct amdgpu_buffer *bo);
