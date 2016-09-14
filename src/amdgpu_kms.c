@@ -939,8 +939,14 @@ Bool AMDGPUPreInit_KMS(ScrnInfoPtr pScrn, int flags)
 	else
 		pAMDGPUEnt->HasCRTC2 = TRUE;
 
-	info->cursor_w = CURSOR_WIDTH_CIK;
-	info->cursor_h = CURSOR_HEIGHT_CIK;
+	if (info->ChipFamily >= CHIP_FAMILY_TAHITI &&
+	    info->ChipFamily <= CHIP_FAMILY_HAINAN) {
+		info->cursor_w = CURSOR_WIDTH;
+		info->cursor_h = CURSOR_HEIGHT;
+	} else {
+		info->cursor_w = CURSOR_WIDTH_CIK;
+		info->cursor_h = CURSOR_HEIGHT_CIK;
+	}
 
 	amdgpu_query_heap_size(pAMDGPUEnt->pDev, AMDGPU_GEM_DOMAIN_GTT,
 				&heap_size, &max_allocation);
