@@ -89,9 +89,9 @@ PKG_CHECK_EXISTS([xorg-server >= 1.16],
 		 [sysconfigdir=""])
 AC_ARG_WITH(xorg-conf-dir,
             AS_HELP_STRING([--with-xorg-conf-dir=DIR],
-                           [Default xorg.conf.d directory [[default=from $PKG_CONFIG xorg-server]]]),
-            [configdir="$withval"],
-            [configdir="$sysconfigdir"])
+                           [Default xorg.conf.d directory [[default=$prefix/share/X11/xorg.conf.d/]]]),
+            [xorgconfdir="$withval"],
+            [xorgconfdir="$prefix/share/X11/xorg.conf.d"])
 AC_SUBST(configdir)
 AM_CONDITIONAL(HAS_XORG_CONF_DIR, [test "x$sysconfigdir" != "x"])
 
