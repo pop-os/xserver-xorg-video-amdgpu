@@ -1,3 +1,933 @@
+commit 6eb2b507d9ec8dcde2482a5ebf59c001933e10ea
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Wed Sep 14 18:26:50 2016 +0900
+
+    Bump version for the 1.1.1 release
+
+commit 8761c46babe0ec01da784dd27db3dd9e769acbca
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Thu Sep 15 15:28:12 2016 +0900
+
+    Use --with-xorg-conf-dir=$prefix/share/X11/xorg.conf.d by default
+    
+    We were using the result of `pkg-config --variable=sysconfigdir
+    xorg-server` before, which may not be inside $prefix, so make install
+    might fail for 10-amdgpu.conf .
+    
+    Fixes make distcheck in that case, and possibly also 10-amdgpu.conf
+    seemingly missing from some distribution packages.
+    
+    This matches what some (though not all) input drivers are doing for their
+    xorg.conf.d snippets.
+    
+    (Cherry picked from commit cd3acb75718dfd42dd25d58b4e7bd4db27b659d8)
+
+commit ca1cf24d4eb773f7380c0da3fa942a5c85074422
+Author: Marek Olšák <marek.olsak@amd.com>
+Date:   Wed Sep 14 17:30:19 2016 +0900
+
+    Fix cursor size for SI
+    
+    Reviewed-by: Michel Dänzer <michel.daenzer@amd.com>
+    Acked-by: Edward O'Callaghan <funfunctor@folklore1984.net>
+    (Cherry picked from commit c4364520691d18961f0a6b77071baeeffaa80a11)
+
+commit ca84c49c88235e1909d11e192eada816b782f041
+Author: Ronie Salgado <roniesalg@gmail.com>
+Date:   Wed Sep 14 17:30:30 2016 +0900
+
+    Add SI PCI IDs
+    
+    Reviewed-by: Michel Dänzer <michel.daenzer@amd.com>
+    (Cherry picked from commit 2eb5d77b841e55e7328df4b95c0d41fec30ce10f)
+
+commit e80321016f7cab9d46f83b785d576d7f02e680ed
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Wed Sep 14 17:20:28 2016 +0900
+
+    Add missing Kaveri PCI ID (1318)
+    
+    Found by comparing src/pcidb/ati_pciids.csv with xf86-video-ati.
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+    (Cherry picked from commit 7d050d15d49ef25e86e7abe88dafb52370715640)
+
+commit 772e43d3e890b193ba24274bf629c8304f17cebc
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Wed Sep 14 17:19:58 2016 +0900
+
+    Add Mullins PCI IDs
+    
+    Bugzilla: https://bugs.freedesktop.org/show_bug.cgi?id=97472
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+    (Cherry picked from commit aa5492660958e359bdc2107cba9a211ff988c90e)
+
+commit 3edf690d391b290066a3f39eb24695b8c8a0aaab
+Author: Qiang Yu <Qiang.Yu@amd.com>
+Date:   Wed Sep 14 17:19:29 2016 +0900
+
+    DRI2: Fix amdgpu_dri2_exchange_buffers width/height copy'n'paste error
+    
+    Signed-off-by: Qiang Yu <Qiang.Yu@amd.com>
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+    Reviewed-by: Michel Dänzer <michel.daenzer@amd.com>
+    (Cherry picked from commit 73c8dc000ad6b2b53ba3aa7155f5e8f6b55623b7)
+
+commit 0b3bde7f9e42577b6720cb290d03fab3b05614b4
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Wed Sep 14 17:18:51 2016 +0900
+
+    DRI2: Add interpolated_vblanks in amdgpu_dri2_get_crtc_msc
+    
+    We need that in amdgpu_dri2_drawable_crtc as well for priv->vblank_delta
+    to work as intended.
+    
+    amdgpu_dri2_get_msc was already doing this.
+    
+    Fixes hangs in some cases when using VDPAU via DRI2 and moving the
+    window between CRTCs.
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+    (Cherry picked from commit abd1a7901c95e4bc78415cf1b7923623b9177152)
+
+commit 2e6e81aa8d4b33eb326e674dca4e29b3d638cac0
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Wed Sep 14 17:17:39 2016 +0900
+
+    Only use RandR APIs if RandR is enabled
+    
+    Fixes crash with Xinerama enabled, which disables RandR.
+    
+    Fixes: https://bugs.debian.org/827984
+    
+    (Ported from radeon commit 3be841d0ae7d505cef325993205b12d15e98dba9)
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+    (Cherry picked from commit b5e2b964b7884c205a7c0fa578e05e867c176fcc)
+
+commit 01565e4427b192c7c55a820f1fb762e852859903
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Wed Sep 14 17:16:49 2016 +0900
+
+    Destroy all dedicated scanout buffers during CloseScreen
+    
+    Fixes leaking active scanout buffers across a server reset, which also
+    fixes server reset with glamor and active scanout buffers.
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+    (Cherry picked from commit d96dabc71b1b32dc4b422a9633cdd4e0e95da052)
+
+commit 7977f39d3c7847aeba2a06f4923f12eee27b4474
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Wed Sep 14 16:50:36 2016 +0900
+
+    glamor: Reallocate linear pixmap BO if necessary for DRI2 PRIME
+    
+    Fixes corruption when using DRI2 PRIME render offloading with the master
+    screen using this driver.
+    
+    Reported-by: Qiang Yu <qiang.yu@amd.com>
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+    Tested-by: Qiang Yu <qiang.yu@amd.com>
+    (Cherry picked from commit 0007c2f018ba663303d91d847e7c085269a23062)
+
+commit 062a7b9b81473969e5ca6034e5369106bf3088c4
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Wed Sep 14 16:49:53 2016 +0900
+
+    Move DRI2's local fixup_glamor helper to amdgpu_glamor_set_pixmap_bo v2
+    
+    So it can be used outside of the DRI2 code.
+    
+    v2: Keep pixmap refcnt increment in amdgpu_dri2_create_buffer2 (Qiang Yu)
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+    Tested-by: Qiang Yu <qiang.yu@amd.com> (v1)
+    (Cherry picked from commit 5518bf5d793439b5bab369e5fc18de9a4a3b9dd6)
+
+commit 7dc2c5bae56a0c2aab38a9d8e77966b5d2f22ff2
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Wed Sep 14 16:48:46 2016 +0900
+
+    Consolidate get_drawable_pixmap helper
+    
+    There were two static helpers for the same purpose. Consolidate them
+    into a single inline helper which can be used anywhere.
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+    Tested-by: Qiang Yu <qiang.yu@amd.com>
+    (Cherry picked from commit 641f4647b7f51dfd2da330376cd10fa9702b6423)
+
+commit 5be3295cb2068d0b8234344f66ece245e4fa7999
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Wed Sep 14 16:43:48 2016 +0900
+
+    Add amdgpu_pixmap_get_tiling_info
+    
+    Retrieves the tiling information about a pixmap BO from the kernel
+    driver.
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+    Tested-by: Qiang Yu <qiang.yu@amd.com>
+    (Cherry picked from commit 8e40f190e4704c2802bf0f073f17e742786d0f18)
+
+commit 8cd5aa76c7d7fc48f42c31020306ea871e9edda2
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Wed Sep 14 16:43:10 2016 +0900
+
+    Remove amdgpu_share_pixmap_backing
+    
+    Not used anymore.
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+    Tested-by: Qiang Yu <qiang.yu@amd.com>
+    (Cherry picked from commit e7eeb6ad1133b6023d34b4489959ae330a8e15dd)
+
+commit 0af88ed18a22b7d038c735093236c54eadc3b118
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Wed Sep 14 16:42:39 2016 +0900
+
+    glamor: Fix amdgpu_glamor_share_pixmap_backing for priv->bo == NULL
+    
+    Fixes crash when running a compositor and DRI_PRIME client via DRI2.
+    
+    Reported-by: Qiang Yu <qiang.yu@amd.com>
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+    Tested-by: Qiang Yu <qiang.yu@amd.com>
+    (Cherry picked from commit b36c77695ba77b59a0ccd868454e3af4fc04d5ff)
+
+commit 0d5b6957aef95872dd34ba0eb4284ebe70ee685d
+Author: Alex Deucher <alexander.deucher@amd.com>
+Date:   Wed Sep 14 16:41:46 2016 +0900
+
+    add missing bonaire pci id
+    
+    Signed-off-by: Alex Deucher <alexander.deucher@amd.com>
+    (Cherry picked from commit 60ced5026ebc34d9f32c7618430b6a7ef7c8eb4b)
+
+commit 10ff4b42eaa946364b19e9433bc85748e1db2835
+Author: Flora Cui <Flora.Cui@amd.com>
+Date:   Wed Sep 14 16:41:16 2016 +0900
+
+    Add more Polaris 11 PCI IDs
+    
+    Signed-off-by: Flora Cui <Flora.Cui@amd.com>
+    Reviewed-by: Christian König <christian.koenig@amd.com>
+    Signed-off-by: Alex Deucher <alexander.deucher@amd.com>
+    (Cherry picked from commit 8e89448ee00da16e05e6777f34bb75d2dd6f7025)
+
+commit af5d3932147390ee2dcf33f594f549dc562e5078
+Author: Flora Cui <Flora.Cui@amd.com>
+Date:   Wed Sep 14 16:40:43 2016 +0900
+
+    Add more Polaris 10 PCI IDs
+    
+    Signed-off-by: Flora Cui <Flora.Cui@amd.com>
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+    Reviewed-by: Michel Dänzer <michel.daenzer@amd.com>
+    Signed-off-by: Alex Deucher <alexander.deucher@amd.com>
+    (Cherry picked from commit a59b23d64285741a7a25e314343f6261046d980f)
+
+commit da820a6661357ae707e5793a549476c085d90236
+Author: Qiang Yu <Qiang.Yu@amd.com>
+Date:   Wed Sep 14 17:18:23 2016 +0900
+
+    Fix amdgpu_mode_hotplug crash on multi GPU platform.
+    
+    On multi GPU platform, some screen is created by other GPU DDX.
+    
+    Signed-off-by: Qiang Yu <Qiang.Yu@amd.com>
+    Reviewed-by: Michel Dänzer <michel.daenzer@amd.com>
+    (Cherry picked from commit 978242977e5dc905e1d5a46b1b0d34b356c7af26)
+
+commit f8c6e51211d2fe2d01fa2223b4215f293e6a11f5
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Wed Sep 14 16:39:55 2016 +0900
+
+    Handle Zaphod mode correctly in amdgpu_mode_hotplug
+    
+    We need to scan both screens of the entity for existing connectors, and
+    enumerate DVI & HDMI connectors consistently regardless of which screen
+    they're assigned to.
+    
+    Fixes crash when hot-(un)plugging connectors in Zaphod mode.
+    
+    Bugzilla: https://bugs.freedesktop.org/show_bug.cgi?id=93415
+    (Ported from radeon commit c801f9f10a5d72d935faf21e72f7e7808fb4f05f)
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+    (Cherry picked from commit 14606e127f4b6eb0b00fd42cec13d524a67e4c4a)
+
+commit 988b6de86658b845af50542cfd71a0c9c267991d
+Author: Flora Cui <flora.cui@amd.com>
+Date:   Wed Sep 14 16:38:56 2016 +0900
+
+    add strato pci id
+    
+    Signed-off-by: Flora Cui <flora.cui@amd.com>
+    Reviewed-by: Jammy Zhou <Jammy.Zhou@amd.com>
+    (Cherry picked from commit 4822ec7a23d2253c88bc403f17abb6d7a053528c)
+
+commit 804dd4be71733f5f5078e5b4824abe9a9bb1228d
+Author: Qiang Yu <Qiang.Yu@amd.com>
+Date:   Wed Sep 14 16:01:16 2016 +0900
+
+    Remove RR_Capability_SinkOutput for GPU without CRTC.
+    
+    Signed-off-by: Qiang Yu <Qiang.Yu@amd.com>
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+    Reviewed-by: Michel Dänzer <michel.daenzer@amd.com>
+    (Cherry picked from commit a0bbb373f902e0ffc14570c85faec7e44134f62e)
+
+commit a04f4015d6afef20c2b79e2779f6555836ee2b07
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Thu Apr 7 16:47:25 2016 +0900
+
+    Bump version for 1.1.0 release
+
+commit aed1c17c43b2c0c983f6fc0973a5224d0faf32d9
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Mon Apr 4 18:28:02 2016 +0900
+
+    glamor: Force GPU rendering to/from pixmaps created via DRI3
+    
+    Fixes crash when running DRI3 clients with ShadowPrimary enabled.
+    
+    Bugzilla: https://bugs.freedesktop.org/show_bug.cgi?id=94799
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+
+commit faf9d720b7d650f5f1ea657a874d08eac3972e60
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Fri Apr 1 16:09:51 2016 +0900
+
+    Update manpage entry for Option "TearFree"
+    
+    It's now effective for rotation as well.
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+
+commit 5ba95c3abeb8df82aa8d33a47596eae6403ea7af
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Fri Apr 1 15:29:26 2016 +0900
+
+    Identify DRM event queue entries by sequence number instead of by pointer
+    
+    If the memory for an entry was allocated at the same address as that for
+    a previously cancelled entry, the handler could theoretically be called
+    prematurely, triggered by the DRM event which was submitted for the
+    cancelled entry.
+    
+    (Ported from radeon commit 4693b1bd5b5c381e8b7b68a6f7f0c6696d6a68df)
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+
+commit 8ecfa69b5a833bd4c39e773a6acfd7eef9144d13
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Wed Mar 30 18:33:00 2016 +0900
+
+    DRI3: Refuse to open DRM file descriptor for ssh clients
+    
+    Fixes hangs when attempting to use DRI3 on display connections forwarded
+    via SSH.
+    
+    Don't do this for Xorg > 1.18.99.1 since the corresponding xserver
+    change has landed in Git master.
+    
+    Bugzilla: https://bugs.freedesktop.org/show_bug.cgi?id=93261
+    
+    (Ported from radeon commit 0b3aac1de9db42bfca545fa331e4985836682ec7)
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+
+commit b2a2e114eec0967f7b67f030fbab8983cf980489
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Fri Mar 25 11:55:34 2016 +0900
+
+    Revert "Use render node for DRI3 if available"
+    
+    This reverts commit ea558e645786b08d75307716036045170e97b43e.
+    
+    It broke VDPAU<->GL interop with DRI3 enabled, because the Gallium VDPAU
+    code doesn't support DRI3 yet. We can consider re-enabling this once
+    there is a Mesa release where the Gallium VDPAU code supports DRI3.
+    
+    Bugzilla: https://bugs.freedesktop.org/show_bug.cgi?id=94675
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+
+commit e31a2d668a1b5ebaf75d423c8123cbc8e0dcbae9
+Author: Flora Cui <Flora.Cui@amd.com>
+Date:   Wed Nov 18 16:44:13 2015 +0800
+
+    add polaris10 pci id
+    
+    Reviewed-by: Michel Dänzer <michel.daenzer@amd.com>
+    Signed-off-by: Flora Cui <Flora.Cui@amd.com>
+    Reviewed-by: Jammy Zhou <Jammy.Zhou@amd.com>
+
+commit 6e09b8deb77f76b9bb7d393cc1ad924ebba62eff
+Author: Flora Cui <Flora.Cui@amd.com>
+Date:   Thu Nov 5 14:16:39 2015 +0800
+
+    add polaris11 pci id
+    
+    Reviewed-by: Michel Dänzer <michel.daenzer@amd.com>
+    Signed-off-by: Flora Cui <Flora.Cui@amd.com>
+    Reviewed-By: Jammy Zhou <Jammy.Zhou@amd.com>
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+
+commit 7d32c43fff4c8df32cce150223094f793e036cf3
+Author: Alex Deucher <alexander.deucher@amd.com>
+Date:   Wed Oct 28 17:28:23 2015 -0400
+
+    add Polaris chip families
+    
+    Reviewed-by: Michel Dänzer <michel.daenzer@amd.com>
+    Signed-off-by: Alex Deucher <alexander.deucher@amd.com>
+
+commit fbf9ae18cd241b8b78936aa30441e5fbfd9ba1c5
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Thu Mar 24 19:05:15 2016 +0900
+
+    Require xserver 1.9 or newer
+    
+    1.9.0 was released in August 2010.
+    
+    We were already unintentionally relying on things not available in 1.8
+    for at least a year, and nobody has complained.
+    
+    (Ported from radeon commit e592f32f8b5f5873fcc18b10a69dd5e4ccf11073)
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+
+commit 912db5fbbc6b9b1121c8a03168cb4bd870474376
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Thu Mar 24 18:59:05 2016 +0900
+
+    Fix build against older versions of xserver
+    
+    Also slightly clean up the error handling in amdgpu_scanout_do_update.
+    
+    Bugzilla: https://bugs.freedesktop.org/show_bug.cgi?id=94614
+    
+    (Ported from radeon commit bde466e5d44cad64b4e4eceaa5de80fdbf86356e)
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+
+commit 3fb6280ab3b104b02841c7cab8ed68c1d463c834
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Thu Mar 24 18:56:44 2016 +0900
+
+    DRI3 only works with acceleration
+    
+    Bugzilla: https://bugs.freedesktop.org/show_bug.cgi?id=94214
+    
+    (Ported from radeon commit d21ac4669a8b2cdd4eec5e5a94d1950b7423b8b5)
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+
+commit 3177fe817a5f2de4ed10860866a0dd6d6c6ba816
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Thu Mar 24 18:51:59 2016 +0900
+
+    Check for xf86CursorResetCursor
+    
+    If it's available, Xorg calls it on each mode configuration change. It
+    does what xf86_reload_cursors does (and more), so we don't need to call
+    the latter anymore.
+    
+    (Ported from radeon commit d670c5c9851b4eff21c845d26c7d7e4eb5ee0fa9)
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+
+commit a3dfce7b24e1ea01c1aa62926025a545312cbe13
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Thu Mar 24 18:45:46 2016 +0900
+
+    Don't try DRI2/Present flipping while the HW cursor can't be used
+    
+    Flipping doesn't interact correctly with SW cursor: A flip makes the SW
+    cursor disappear. It will only appear again when the cursor is moved,
+    but it will be surrounded by corruption, because the SW cursor code
+    will restore stale screen contents at the old cursor location before
+    drawing the cursor at the new location.
+    
+    (Ported from radeon commit 7f3d0780ca65a90117c2a61362dbc0899bd9c0b0)
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+
+commit ba9be8f32f0321689133e17c1681809dec8c6cf1
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Thu Mar 24 18:44:30 2016 +0900
+
+    Factor out HW cursor checking code into drmmode_can_use_hw_cursor
+    
+    And add a check for RandR 1.4 multihead.
+    
+    (Ported from radeon commit 3de480e83c0a1824838d662d6d67c9fe85277298)
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+
+commit 4a60b4b1851a3cbc2d8ad9048d68eeb6947cf132
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Thu Mar 24 12:03:38 2016 +0900
+
+    Call AMDGPUBlockHandler_KMS before setting initial modes
+    
+    Doing it the other way around meant that there was still a possibility
+    for the front buffer contents to be uninitialized when they start being
+    scanned out.
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+
+commit 37bd79652a8ec612b94a1863e8c580b1cfaf3960
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Fri Mar 18 18:51:00 2016 +0900
+
+    present: Return rotated CRTCs from amdgpu_present_get_crtc
+    
+    Sync-to-vblank works fine with rotation. We're still checking for
+    rotation in amdgpu_present_check_flip.
+    
+    Returning NULL from here resulted in the xserver present code falling
+    back to the fake CRTC running at 1 fps.
+    
+    (Ported from radeon commit a03271de5ecdaa7790d1316e993c4450b91fe936)
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+
+commit 6b930fb3285dea4a6440e31099c96f08da508d49
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Fri Mar 18 18:47:10 2016 +0900
+
+    present: Clear drmmode->fb_id before calling set_mode_major for unflip
+    
+    Without this, drmmode_set_mode_major may just re-set the FB for the
+    last flipped BO, in which case the display will probably freeze.
+    
+    Reproduction recipe: Enable rotation while a fullscreen client is
+    flipping.
+    
+    (Ported from radeon commit 40191d82370eb7e58bd34c44966cbf44c3703229)
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+
+commit 6889e091442b6ba1b9351e72bd067425e87d96e9
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Fri Mar 18 18:18:04 2016 +0900
+
+    Make Option "TearFree" effective for rotated/reflected outputs as well
+    
+    Support varies by xserver version:
+    
+    < 1.12:    No support for the driver handling rotation/reflection
+    1.12-1.15: Support for driver handling rotation/reflection, but there's
+               a bug preventing the HW cursor from being visible everywhere
+               it should be on rotated outputs, so we can only support
+               TearFree for reflection.
+    >= 1.16:   While the bug above is still there (fixes pending review),
+               the driver can force SW cursor for rotated outputs, so we
+               can support TearFree for rotation as well.
+    
+    (Ported from radeon commit 798c4fd16d339b1ad5fd729cc884be084c60e38b)
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+
+commit da4e0c66fcbcf63143372720e3d606a462332e3a
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Fri Mar 18 18:15:34 2016 +0900
+
+    Consolidate pScreen usage in drmmode_set_mode_major
+    
+    We were already relying on pScrn->pScreen being non-NULL in some cases,
+    which is supposedly always true ever since this function is no longer
+    getting called from ScreenInit.
+    
+    (Ported from radeon commit eb611a2e4ecce7a1ab85fd72b9b78e3269311dd5)
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+
+commit 0bbf09dd7ef54133b3e534becb3ba15c0cf3eed2
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Fri Mar 18 18:14:28 2016 +0900
+
+    Remove check for XF86_CRTC_VERSION 3
+    
+    We require xserver >= 1.8, which was already at version 3.
+    
+    (Ported from radeon commit 06602171386e538081c298645fb7ca1a70fe80cc)
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+
+commit 3485ca0051a224d00135d4024a97a6c4e85a9644
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Fri Mar 18 18:07:07 2016 +0900
+
+    Deal with modesets and page flips crossing on a CRTC
+    
+    If we set a mode while a flip is pending, the kernel driver may program
+    the flip to the hardware after the modeset. If that happens, the hardware
+    will display the BO from the flip, whereas we will assume it displays the
+    BO from the modeset. In other words, the display will most likely freeze,
+    at least until another modeset.
+    
+    Prevent this condition by waiting for a pending flip to finish before
+    setting a mode.
+    
+    Fixes display freezing when setting rotation or a transform with
+    TearFree enabled.
+    
+    (Ported from radeon commit a88985f5d1e39caca49ceb65678aaa9cb622a0d2)
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+
+commit b9d00fa7aaf946d985897380bfa42faafbf1b3fb
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Fri Mar 18 17:18:00 2016 +0900
+
+    Make DRM event queue xf86CrtcPtr based instead of ScrnInfoPtr based
+    
+    This allows for a minor simplification of the code.
+    
+    (Ported from radeon commit f5d968cbba3c9b7ec202161f2157d8d64778c817)
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+
+commit e0ed26151bfeadf309da53d001751c0a014dbd24
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Fri Mar 18 17:11:47 2016 +0900
+
+    Remove amdgpu_scanout_flip_handler
+    
+    No longer necessary now that amdgpu_drm_queue_handler can handle
+    e->handler == NULL.
+    
+    (Ported from radeon commit d5dbb07db22d5420c81dfebc060f0dd86e7b8a20)
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+
+commit acd5da56f502d6ad115501e77bce06fe72b1895c
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Fri Mar 18 17:14:49 2016 +0900
+
+    DRI2: Also clear dri2_flipping when client disconnects before event
+    
+    Fixes the following problem:
+    
+    With DRI3 enabled, run glxgears with LIBGL_DRI3_DISABLE=1, make it
+    fullscreen and press Escape while it's still fullscreen. This could
+    result in dri2_flipping not getting cleared, spuriously preventing apps
+    using DRI3 from flipping.
+    
+    (Ported from radeon commit e87365117acbd80b7d80fbb5eb30890ef7153291)
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+
+commit a58bfa98208cc092014d3f36a08714eb1e0d8814
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Fri Mar 18 17:07:47 2016 +0900
+
+    drm_queue: Don't abort events immediately from amdgpu_drm_abort_client
+    
+    Keep them around until the DRM event arrives, but then call the abort
+    functions instead of the handler functions.
+    
+    This is a prerequisite for the following fix.
+    
+    (Ported from radeon commit 3989766edde85d1abe7024577b98fc9b007bc02a)
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+
+commit e4888df6e32bb817bf0d6166a22b19c14e189a84
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Fri Mar 18 17:04:10 2016 +0900
+
+    Fix RandR CRTC transforms
+    
+    Currently, Xorg will only transform the cursor as of the first time the
+    cursor image changes after a transform is set.
+    
+    Bugzilla: https://bugs.freedesktop.org/show_bug.cgi?id=80678
+    
+    (Ported from radeon commit 9483a3d777919b224f70c3b4d01e4b320a57db31)
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+
+commit 43af92ede0968f2108f9562aa4c2c861ac703617
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Fri Mar 18 16:58:07 2016 +0900
+
+    Build RandR 1.4 provider name from chipset name and bus ID
+    
+    Instead of just "amdgpu", it's now e.g. "TONGA @ pci:0000:01:00.0".
+    
+    (Ported from radeon commit c7cf00487cd6d4a5d0f39d5b92ff04f6420d6a32)
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+
+commit 5ec1797a2858d693d18d21326e2307d71555e1db
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Wed Feb 24 17:33:49 2016 +0900
+
+    DRI2: Use amdgpu_pixmap_get_handle
+    
+    Now we can share pixmaps with no struct amdgpu_buffer via DRI2.
+    
+    Fixes VDPAU video playback freezing when using an OpenGL compositor with
+    DRI3 enabled and mpv VAAPI hardware decoding with OpenGL output.
+    
+    Bugzilla: https://bugs.freedesktop.org/show_bug.cgi?id=89755
+    Bugzilla: https://bugs.freedesktop.org/show_bug.cgi?id=93804
+    
+    (ported from radeon commit f8b0f23e9f4af9f9097ee5e72d53b45173163c41)
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+
+commit df60c635e1e632233de9dd4b01d63c2b963003f8
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Wed Feb 24 17:06:43 2016 +0900
+
+    glamor: Avoid generating GEM flink names for BOs shared via DRI3 (v2)
+    
+    We can't create our own struct amdgpu_buffer representation in this case
+    because destroying that would make the GEM handle inaccessible to glamor
+    as well. So just get the handle directly via dma-buf.
+    
+    (ported from radeon commit 391900a670addec39515f924265bfa9f8bfa9ec0,
+     extended to cache BO handles in the private for non-DRI3 pixmaps as
+     well)
+    
+    v2: Swap whole pixmap privates instead of just BOs in
+        amdgpu_dri2_exchange_buffers to avoid invalidating cached BO handles
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+
+commit e463b849f3e9d7b69e64a65619a22e00e78d297b
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Tue Feb 23 18:10:29 2016 +0900
+
+    Make amdgpu_do_pageflip take a pixmap instead of a BO
+    
+    (inspired by radeon commit 7b4fc4a677d252d01c2bf80d162bc35814059eaa)
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+
+commit 1ee341f9d909f3b7ba2984fc912dabdb98c34b19
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Tue Feb 23 18:42:19 2016 +0900
+
+    Add amdgpu_pixmap_get_handle helper
+    
+    (inspired by radeon commits dfad91fffb5bd013785223b42d78886df839eacf
+     and ccbda955ebae1d457d35293833f12791e0f9fb0b)
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+
+commit a36bbfd98b96426bbe0be3923c64da7ec0e565d0
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Mon Feb 15 18:41:51 2016 +0900
+
+    HAS_DIRTYTRACKING_ROTATION also supports multiple CRTCs
+    
+    (ported from radeon commit ff9a6b6f079a8419f4e6fadfee778060618bf735)
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+
+commit a37746ffceaed83e48e48fb05439be7e020dd2ea
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Mon Feb 15 18:35:54 2016 +0900
+
+    Load fb module before glamoregl/shadow modules
+    
+    Fixes unresolved symbols on some systems.
+    
+    Bugzilla: https://bugs.freedesktop.org/show_bug.cgi?id=93105
+    (ported from radeon commit 78fbca095ae9887a2d3de48bb07975e2d1126e68)
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+
+commit 59c0a6807110eca829c6708e16585a38f39a5c17
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Mon Feb 15 18:28:13 2016 +0900
+
+    Don't advertise any PRIME offloading capabilities without acceleration
+    
+    Acceleration is required even for display offloading. Trying to enable
+    display offloading without acceleration resulted in a crash.
+    
+    (ported from radeon commit b19417e2fddf4df725951aea5ad5e9558338f59e)
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+
+commit a3eac85d812ecc605436e6bd5b9ee7ebf307e3d3
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Tue Jan 26 16:12:28 2016 +0900
+
+    Only map front buffer if glamor acceleration is disabled (v2)
+    
+    Otherwise the front buffer may not be accessible by the CPU, because Mesa
+    sets the AMDGPU_GEM_CREATE_NO_CPU_ACCESS flag for tiled buffers, because
+    accessing tiled buffers with the CPU makes little sense.
+    
+    v2: Also handle Option "AccelMethod" "none"
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+
+commit 2fcb7dadd3c71cd405cbbaafc777697538ca9c29
+Author: jimqu <Jim.Qu@amd.com>
+Date:   Mon Jan 25 09:47:00 2016 +0800
+
+    glamor: Return NullPixmap on failure to create shareable pixmap
+    
+    If we were asked to create a shareable pixmap, it doesn't make sense
+    to return a pixmap which isn't shareable. Doing so caused trouble down
+    the line such as a crash with older versions of glamor when trying to
+    use GLX pixmaps of bpp < 32 via DRI2.
+    
+    Signed-off-by: JimQu <jim.qu@amd.com>
+    Reviewed-by: Michel Dänzer <michel.daenzer@amd.com>
+
+commit 5269a2228bff6023c1a7f3e8534027e1d7addc25
+Author: jimqu <Jim.Qu@amd.com>
+Date:   Mon Jan 25 10:12:02 2016 +0800
+
+    Move amdgpu_glamor_destroy_pixmap before amdgpu_glamor_create_pixmap
+    
+    The next commit will call the former from the latter. No functional
+    change.
+    
+    Signed-off-by: JimQu <jim.qu@amd.com>
+    Reviewed-by: Michel Dänzer <michel.daenzer@amd.com>
+
+commit 54c959c163288caa87f612911b70df73f87d29d6
+Author: Tom St Denis <tom.stdenis@amd.com>
+Date:   Wed Jan 20 09:37:36 2016 -0500
+
+    Move memset() after variable declarations
+    
+    To make the code more "C" like move the function calls
+    after the variable declarations.
+    
+    Signed-off-by: Tom St Denis <tom.stdenis@amd.com>
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+    Reviewed-by: Michel Dänzer <michel.daenzer@amd.com>
+
+commit 8853b07ae8169c409740c40d45cd335bd608f2a7
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Tue Jan 19 17:35:11 2016 +0900
+
+    Set the RandR primary output on startup if Xorg hasn't
+    
+    Fixes xrandr (XRRGetOutputPrimary) not reporting any output as primary
+    after startup.
+    
+    (Ported from radeon commit b16856b25086ffb27365ac2249b8da921066ce62)
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+
+commit bd5c65daceaf633c36fcec86ff061df10c364bc0
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Thu Jan 7 15:53:41 2016 +0900
+
+    Only call amdgpu_bus_id once in each probe path (v2)
+    
+    Instead of up to twice as before.
+    
+    v2: Remove free(busIdString) call from amdgpu_kernel_mode_enabled, the
+        bus ID string is now managed by its callers.
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com> (v1)
+
+commit 6e42c58375a4c3229da93c27bbd104af145c6163
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Thu Jan 7 15:57:38 2016 +0900
+
+    Remove pci_dev test from amdgpu_get_scrninfo
+    
+    The pci_dev parameter can never be NULL since we only support KMS.
+    
+    Reported-by: Tom St Denis <tom.stdenis@amd.com>
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+
+commit 8e09180798a06af5afa030d754938e4ca06e272f
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Thu Jan 7 15:35:35 2016 +0900
+
+    Re-use PCI bus ID code from kernel_open_fd in kernel_mode_enabled
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+
+commit 4eb9cedca080b30c57ded349a397620ee7d0cd46
+Author: Mykola Lysenko <Mykola.Lysenko@amd.com>
+Date:   Wed Jan 13 14:03:55 2016 +0800
+
+    Initialize drmmode_crtc dpms_mode to DPMSModeOff
+    
+    This disables query of disabled pipes for drmWaitVBlank on X start
+    
+    Signed-off-by: Mykola Lysenko <Mykola.Lysenko@amd.com>
+    Reviewed-by: Michel Dänzer <michel.daenzer@amd.com>
+
+commit 1d0b0c1794e65e581a48aa9fb19679d928d82a5d
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Thu Dec 10 18:08:12 2015 +0900
+
+    sync: Check if miSyncShmScreenInit symbol is resolved at runtime
+    
+    It may be disabled in the Xorg build, either explicitly or because the
+    xshmfence library isn't available.
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+
+commit f4107f67f147e2500582fc36cf0f0f76bc1ef098
+Author: Mykola Lysenko <Mykola.Lysenko@amd.com>
+Date:   Wed Dec 23 11:58:47 2015 -0500
+
+    Check for NULL koutput in drmmode_output_dpms
+    
+    This situation happens whit start of usage of DRM DP MST framework,
+    when connectors created and destroyed dynamically.
+    
+    Signed-off-by: Mykola Lysenko <Mykola.Lysenko@amd.com>
+    Reviewed-by: Michel Dänzer <michel.daenzer@amd.com>
+
+commit ea558e645786b08d75307716036045170e97b43e
+Author: Jammy Zhou <Jammy.Zhou@amd.com>
+Date:   Fri Nov 20 17:03:05 2015 +0800
+
+    Use render node for DRI3 if available
+    
+    Signed-off-by: Jammy Zhou <Jammy.Zhou@amd.com>
+    Reviewed-by: Michel Dänzer <michel.daenzer@amd.com>
+
+commit 43c2dc1aab682d5b6ad49d24983d6382c4f305bb
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Thu Nov 19 17:05:05 2015 +0900
+
+    glamor: Deal with glamor_egl_destroy_textured_pixmap being removed
+    
+    When it's not available, it's safe to call down to the glamor
+    DestroyPixmap hook instead.
+    
+    (ported from radeon commit 10b7c3def58bb34acc38f076bc230e25b454ab79)
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+
+commit 84cab5738a315e9825bd0864c4f0fc5b03eb81a1
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Thu Nov 19 16:44:22 2015 +0900
+
+    glamor: Restore all ScreenRec hooks during CloseScreen
+    
+    (ported from radeon commit 535e5438b2c32f774b9c8c27ee0289b4749548ef)
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+
+commit a00c050c2e5667ed815c51979a3cadb5146136ff
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Thu Nov 19 17:55:53 2015 +0900
+
+    Post 1.0.0 release version bump
+
 commit 755e6ff2337cf615e3ba0854ccd533baec7144db
 Author: Michel Dänzer <michel.daenzer@amd.com>
 Date:   Thu Nov 19 17:28:19 2015 +0900
