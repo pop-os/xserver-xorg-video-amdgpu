@@ -1,6 +1,7 @@
 xserver-xorg-video-amdgpu (1.1.1-1) UNRELEASED; urgency=medium
 
   * New upstream release.
+  * fix-configdir.diff: Fix installing the config snippet.
 
  -- Timo Aaltonen <tjaalton@debian.org>  Thu, 15 Sep 2016 22:19:44 +0300
 
