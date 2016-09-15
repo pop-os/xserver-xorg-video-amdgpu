@@ -1,9 +1,9 @@
-xserver-xorg-video-amdgpu (1.1.1-1) UNRELEASED; urgency=medium
+xserver-xorg-video-amdgpu (1.1.1-1) unstable; urgency=medium
 
   * New upstream release.
   * fix-configdir.diff: Fix installing the config snippet.
 
- -- Timo Aaltonen <tjaalton@debian.org>  Thu, 15 Sep 2016 22:19:44 +0300
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 15 Sep 2016 23:55:07 +0300
 
 xserver-xorg-video-amdgpu (1.1.0-1) unstable; urgency=medium
 
