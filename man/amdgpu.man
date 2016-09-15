@@ -29,7 +29,7 @@ RandR support up to version 1.4;
 .SH SUPPORTED HARDWARE
 The
 .B amdgpu
-driver supports CI and newer families' video cards.
+driver supports SI and newer families' video cards.
 .PD
 .SH CONFIGURATION DETAILS
 Please refer to __xconfigfile__(__filemansuffix__) for general configuration

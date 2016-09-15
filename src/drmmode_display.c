@@ -36,6 +36,7 @@
 #include "damagestr.h"
 #include "micmap.h"
 #include "xf86cmap.h"
+#include "xf86Priv.h"
 #include "sarea.h"
 
 #include "drmmode_display.h"
@@ -2159,8 +2160,10 @@ void drmmode_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode)
 
 void drmmode_fini(ScrnInfoPtr pScrn, drmmode_ptr drmmode)
 {
+	xf86CrtcConfigPtr config = XF86_CRTC_CONFIG_PTR(pScrn);
 	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(pScrn);
 	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
+	int c;
 
 	if (!info->drmmode_inited)
 		return;
@@ -2170,6 +2173,14 @@ void drmmode_fini(ScrnInfoPtr pScrn, drmmode_ptr drmmode)
 		RemoveGeneralSocket(pAMDGPUEnt->fd);
 		RemoveBlockAndWakeupHandlers((BlockHandlerProcPtr) NoopDDA,
 					     drm_wakeup_handler, drmmode);
+	}
+
+	for (c = 0; c < config->num_crtc; c++) {
+		xf86CrtcPtr crtc = config->crtc[c];
+		drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
+
+		drmmode_crtc_scanout_destroy(&info->drmmode, &drmmode_crtc->scanout[0]);
+		drmmode_crtc_scanout_destroy(&info->drmmode, &drmmode_crtc->scanout[1]);
 	}
 }
 
@@ -2362,9 +2373,10 @@ amdgpu_mode_hotplug(ScrnInfoPtr scrn, drmmode_ptr drmmode)
 	xf86CrtcConfigPtr config = XF86_CRTC_CONFIG_PTR(scrn);
 	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(scrn);
 	drmModeResPtr mode_res;
-	int i, j;
+	int i, j, s;
 	Bool found;
 	Bool changed = FALSE;
+	int num_dvi = 0, num_hdmi = 0;
 
 	mode_res = drmModeGetResources(pAMDGPUEnt->fd);
 	if (!mode_res)
@@ -2400,24 +2412,47 @@ restart_destroy:
 	for (i = 0; i < mode_res->count_connectors; i++) {
 		found = FALSE;
 
-		for (j = 0; j < config->num_output; j++) {
-			xf86OutputPtr output = config->output[j];
-			drmmode_output_private_ptr drmmode_output;
+		for (s = 0; !found && s < xf86NumScreens; s++) {
+			ScrnInfoPtr loop_scrn = xf86Screens[s];
+			xf86CrtcConfigPtr loop_config =
+				XF86_CRTC_CONFIG_PTR(loop_scrn);
 
-			drmmode_output = output->driver_private;
-			if (mode_res->connectors[i] == drmmode_output->output_id) {
-				found = TRUE;
-				break;
+			if (strcmp(loop_scrn->driverName, scrn->driverName) ||
+			    AMDGPUEntPriv(loop_scrn) != pAMDGPUEnt)
+				continue;
+
+			for (j = 0; !found && j < loop_config->num_output; j++) {
+				xf86OutputPtr output = loop_config->output[j];
+				drmmode_output_private_ptr drmmode_output;
+
+				drmmode_output = output->driver_private;
+				if (mode_res->connectors[i] ==
+				    drmmode_output->output_id) {
+					found = TRUE;
+
+					switch(drmmode_output->mode_output->connector_type) {
+					case DRM_MODE_CONNECTOR_DVII:
+					case DRM_MODE_CONNECTOR_DVID:
+					case DRM_MODE_CONNECTOR_DVIA:
+						num_dvi++;
+						break;
+					case DRM_MODE_CONNECTOR_HDMIA:
+					case DRM_MODE_CONNECTOR_HDMIB:
+						num_hdmi++;
+						break;
+					}
+				}
 			}
 		}
 		if (found)
 			continue;
 
-		changed = TRUE;
-		drmmode_output_init(scrn, drmmode, mode_res, i, NULL, NULL, 1);
+		if (drmmode_output_init(scrn, drmmode, mode_res, i, &num_dvi,
+					&num_hdmi, 1) != 0)
+			changed = TRUE;
 	}
 
-	if (changed) {
+	if (changed && dixPrivateKeyRegistered(rrPrivKey)) {
 #if XORG_VERSION_CURRENT >= XORG_VERSION_NUMERIC(1,14,99,2,0)
 		RRSetChanged(xf86ScrnToScreen(scrn));
 #else
