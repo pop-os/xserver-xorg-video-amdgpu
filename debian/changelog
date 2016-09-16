@@ -1,3 +1,9 @@
+xserver-xorg-video-amdgpu (1.1.1-2) UNRELEASED; urgency=medium
+
+  * Use https URL in debian/watch.
+
+ -- Julien Cristau <jcristau@debian.org>  Fri, 16 Sep 2016 07:48:44 +0200
+
 xserver-xorg-video-amdgpu (1.1.1-1) unstable; urgency=medium
 
   * New upstream release.
