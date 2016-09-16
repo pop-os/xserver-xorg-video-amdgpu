@@ -1,3 +1,35 @@
+commit b407c1244d28a80f76275abca2239cdd4120f017
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Fri Sep 16 18:11:31 2016 +0900
+
+    Bump version for 1.1.2 release
+
+commit 82062157263d6f63ce8f645bf32101fd18bd98e5
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Fri Sep 16 18:01:41 2016 +0900
+
+    Fix handling of configure option --with-xorg-conf-dir
+    
+    There were two problems:
+    
+    I accidentally changed the variable name in the AC_ARG_WITH stanza from
+    configdir to xorgconfigdir, so specifying --with-xorg-conf-dir wouldn't
+    work correctly. Fix this back to configdir.
+    
+    If neither --with-xorg-conf-dir nor --prefix is specified on the command
+    line, the $prefix variable doesn't contain "/usr/local" (the default
+    prefix) yet at this point but "NONE". So make install would attempt to
+    install 10-amdgpu.conf in ${DESTDIR}NONE/share/X11/xorg.conf.d/ . Fix
+    this by leaving ${prefix} verbatim in the default value, to be resolved
+    by make.
+    
+    Also print the configdir value along with the values of other similar
+    configuration variables.
+    
+    Reported-by: Timo Aaltonen <tjaalton@debian.org>
+    Reviewed-by: Julien Cristau <jcristau@debian.org>
+    (Cherry picked from commit aa8a3fa2468094cd37959179e8417ba7ba0a326c)
+
 commit 6eb2b507d9ec8dcde2482a5ebf59c001933e10ea
 Author: Michel Dänzer <michel.daenzer@amd.com>
 Date:   Wed Sep 14 18:26:50 2016 +0900

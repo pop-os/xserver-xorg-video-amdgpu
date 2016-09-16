@@ -1,5 +1,7 @@
-xserver-xorg-video-amdgpu (1.1.1-2) UNRELEASED; urgency=medium
+xserver-xorg-video-amdgpu (1.1.2-1) UNRELEASED; urgency=medium
 
+  * New upstream release.
+    - fix-configdir.diff: Dropped, fixed upstream
   * Use https URL in debian/watch.
 
  -- Julien Cristau <jcristau@debian.org>  Fri, 16 Sep 2016 07:48:44 +0200
