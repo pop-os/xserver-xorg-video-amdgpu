@@ -23,7 +23,7 @@
 # Initialize Autoconf
 AC_PREREQ([2.60])
 AC_INIT([xf86-video-amdgpu],
-        [1.1.1],
+        [1.1.2],
         [https://bugs.freedesktop.org/enter_bug.cgi?product=xorg],
         [xf86-video-amdgpu])
 
@@ -89,9 +89,9 @@ PKG_CHECK_EXISTS([xorg-server >= 1.16],
 		 [sysconfigdir=""])
 AC_ARG_WITH(xorg-conf-dir,
             AS_HELP_STRING([--with-xorg-conf-dir=DIR],
-                           [Default xorg.conf.d directory [[default=$prefix/share/X11/xorg.conf.d/]]]),
-            [xorgconfdir="$withval"],
-            [xorgconfdir="$prefix/share/X11/xorg.conf.d"])
+                           [Default xorg.conf.d directory [[default=${prefix}/share/X11/xorg.conf.d]]]),
+            [configdir="$withval"],
+            [configdir='${prefix}/share/X11/xorg.conf.d'])
 AC_SUBST(configdir)
 AM_CONDITIONAL(HAS_XORG_CONF_DIR, [test "x$sysconfigdir" != "x"])
 
@@ -279,6 +279,7 @@ echo "        prefix:              $prefix"
 echo "        exec_prefix:         $exec_prefix"
 echo "        libdir:              $libdir"
 echo "        includedir:          $includedir"
+echo "        configdir:           $configdir"
 
 echo ""
 echo "        CFLAGS:              $CFLAGS"
