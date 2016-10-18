@@ -166,7 +166,7 @@ static Bool amdgpu_open_drm_master(ScrnInfoPtr pScrn, AMDGPUEntPtr pAMDGPUEnt,
 	if (err != 0) {
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
 			   "[drm] failed to set drm interface version.\n");
-		drmClose(pAMDGPUEnt->fd);
+		amdgpu_kernel_close_fd(pAMDGPUEnt);
 		return FALSE;
 	}
 
@@ -254,7 +254,7 @@ static Bool amdgpu_get_scrninfo(int entity_num, struct pci_device *pci_dev)
 	return TRUE;
 
 error_amdgpu:
-	drmClose(pAMDGPUEnt->fd);
+	amdgpu_kernel_close_fd(pAMDGPUEnt);
 error_fd:
 	free(pPriv->ptr);
 error:
@@ -349,6 +349,7 @@ amdgpu_platform_probe(DriverPtr pDriver,
 
 		pPriv->ptr = xnfcalloc(sizeof(AMDGPUEntRec), 1);
 		pAMDGPUEnt = pPriv->ptr;
+		pAMDGPUEnt->platform_dev = dev;
 		pAMDGPUEnt->fd = amdgpu_kernel_open_fd(pScrn, busid, dev);
 		if (pAMDGPUEnt->fd < 0)
 			goto error_fd;
@@ -367,7 +368,6 @@ amdgpu_platform_probe(DriverPtr pDriver,
 		pAMDGPUEnt = pPriv->ptr;
 		pAMDGPUEnt->fd_ref++;
 	}
-	pAMDGPUEnt->platform_dev = dev;
 
 	xf86SetEntityInstanceForScreen(pScrn, pEnt->index,
 				       xf86GetNumEntityInstances(pEnt->
@@ -379,7 +379,7 @@ amdgpu_platform_probe(DriverPtr pDriver,
 	return TRUE;
 
 error_amdgpu:
-	drmClose(pAMDGPUEnt->fd);
+	amdgpu_kernel_close_fd(pAMDGPUEnt);
 error_fd:
 	free(pPriv->ptr);
 error:
