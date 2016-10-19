@@ -17,6 +17,8 @@ my $amdgpuchipsetfile = 'amdgpu_chipset_gen.h';
 my $amdgpuchipinfofile  = 'amdgpu_chipinfo_gen.h';
 
 my %uniquechipsets;
+my @uniquearray;
+my $numunique = 0;
 
 my $csv = Text::CSV_XS->new();
 
@@ -50,7 +52,10 @@ while (<CSV>) {
 	print PCIDEVICEMATCH " ATI_DEVICE_MATCH( PCI_CHIP_$columns[1], 0 ),\n";
 
 	print AMDGPUCHIPSET "  { PCI_CHIP_$columns[1], \"$columns[3]\" },\n";
-	$uniquechipsets{$columns[3]} = 1;
+	if (!$uniquechipsets{$columns[3]}) {
+	    $uniquearray[$numunique] = $columns[3];
+	    $uniquechipsets{$columns[3]} = ++$numunique;
+	}
 
 	print AMDGPUCHIPINFO " { $columns[0], CHIP_FAMILY_$columns[2] },\n";
       }
@@ -63,7 +68,7 @@ while (<CSV>) {
 
 print AMDGPUCHIPINFO "};\n";
 print AMDGPUCHIPSET "  { -1,                 NULL }\n};\n\nSymTabRec AMDGPUUniqueChipsets[] = {\n";
-foreach (sort keys %uniquechipsets) {
+foreach (@uniquearray) {
 	print AMDGPUCHIPSET "  { 0, \"$_\" },\n";
 }
 print AMDGPUCHIPSET "  { -1,                 NULL }\n};\n";
