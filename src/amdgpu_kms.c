@@ -58,7 +58,6 @@
 
 static DevScreenPrivateKeyRec amdgpu_client_private_key;
 
-extern SymTabRec AMDGPUChipsets[];
 static Bool amdgpu_setup_kernel_mem(ScreenPtr pScreen);
 
 const OptionInfoRec AMDGPUOptions_KMS[] = {
@@ -1160,15 +1159,12 @@ static Bool AMDGPUPreInitChipType_KMS(ScrnInfoPtr pScrn,
 				      struct amdgpu_gpu_info *gpu_info)
 {
 	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
+	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(pScrn);
 
 	info->Chipset = info->PciInfo->device_id;
-	pScrn->chipset =
-	    (char *)xf86TokenToString(AMDGPUChipsets, info->Chipset);
-	if (!pScrn->chipset) {
-		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-			   "ChipID 0x%04x is not recognized\n", info->Chipset);
-		return FALSE;
-	}
+	pScrn->chipset = amdgpu_get_marketing_name(pAMDGPUEnt->pDev);
+	if (!pScrn->chipset)
+		pScrn->chipset = "Unknown AMD Radeon GPU";
 
 	if (info->Chipset < 0) {
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,

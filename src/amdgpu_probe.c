@@ -58,9 +58,6 @@
 #include <xf86platformBus.h>
 #endif
 
-#include "ati_pciids_gen.h"
-#include "amdgpu_chipset_gen.h"
-
 _X_EXPORT int gAMDGPUEntityIndex = -1;
 
 /* Return the options for supported chipset 'n'; NULL otherwise */
@@ -69,11 +66,15 @@ static const OptionInfoRec *AMDGPUAvailableOptions(int chipid, int busid)
 	return AMDGPUOptionsWeak();
 }
 
+static SymTabRec AMDGPUAny[] = {
+	{ 0, "All GPUs supported by the amdgpu kernel driver" },
+	{ -1, NULL }
+};
+
 /* Return the string name for supported chipset 'n'; NULL otherwise. */
 static void AMDGPUIdentify(int flags)
 {
-	xf86PrintChipsets(AMDGPU_NAME,
-			  "Driver for AMD Radeon chipsets", AMDGPUUniqueChipsets);
+	xf86PrintChipsets(AMDGPU_NAME, "Driver for AMD Radeon", AMDGPUAny);
 }
 
 static char *amdgpu_bus_id(ScrnInfoPtr pScrn, struct pci_device *dev)
