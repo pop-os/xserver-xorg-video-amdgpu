@@ -61,8 +61,6 @@
 #include "ati_pciids_gen.h"
 #include "amdgpu_chipset_gen.h"
 
-#include "amdgpu_pci_chipset_gen.h"
-
 _X_EXPORT int gAMDGPUEntityIndex = -1;
 
 /* Return the options for supported chipset 'n'; NULL otherwise */
@@ -172,7 +170,7 @@ static Bool amdgpu_get_scrninfo(int entity_num, struct pci_device *pci_dev)
 	DevUnion *pPriv;
 	AMDGPUEntPtr pAMDGPUEnt;
 
-	pScrn = xf86ConfigPciEntity(pScrn, 0, entity_num, AMDGPUPciChipsets,
+	pScrn = xf86ConfigPciEntity(pScrn, 0, entity_num, NULL,
 				    NULL, NULL, NULL, NULL, NULL);
 
 	if (!pScrn)
