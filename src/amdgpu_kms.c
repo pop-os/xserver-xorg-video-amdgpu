@@ -1194,16 +1194,10 @@ static Bool AMDGPUPreInitChipType_KMS(ScrnInfoPtr pScrn)
 	return TRUE;
 }
 
-static Bool amdgpu_get_tile_config(ScrnInfoPtr pScrn)
+static Bool amdgpu_get_tile_config(AMDGPUInfoPtr info,
+				   struct amdgpu_gpu_info *gpu_info)
 {
-	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
-	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(pScrn);
-	struct amdgpu_gpu_info gpu_info;
-
-	memset(&gpu_info, 0, sizeof(gpu_info));
-	amdgpu_query_gpu_info(pAMDGPUEnt->pDev, &gpu_info);
-
-	switch ((gpu_info.gb_addr_cfg & 0x70) >> 4) {
+	switch ((gpu_info->gb_addr_cfg & 0x70) >> 4) {
 	case 0:
 		info->group_bytes = 256;
 		break;
@@ -1273,6 +1267,7 @@ Bool AMDGPUPreInit_KMS(ScrnInfoPtr pScrn, int flags)
 {
 	AMDGPUInfoPtr info;
 	AMDGPUEntPtr pAMDGPUEnt;
+	struct amdgpu_gpu_info gpu_info;
 	DevUnion *pPriv;
 	Gamma zeros = { 0.0, 0.0, 0.0 };
 	int cpp;
@@ -1334,6 +1329,9 @@ Bool AMDGPUPreInit_KMS(ScrnInfoPtr pScrn, int flags)
 	if (!AMDGPUPreInitWeight(pScrn))
 		goto fail;
 
+	memset(&gpu_info, 0, sizeof(gpu_info));
+	amdgpu_query_gpu_info(pAMDGPUEnt->pDev, &gpu_info);
+
 	if (!AMDGPUPreInitChipType_KMS(pScrn))
 		goto fail;
 
@@ -1360,7 +1358,7 @@ Bool AMDGPUPreInit_KMS(ScrnInfoPtr pScrn, int flags)
 		/* set default group bytes, overridden by kernel info below */
 		info->group_bytes = 256;
 		info->have_tiling_info = FALSE;
-		amdgpu_get_tile_config(pScrn);
+		amdgpu_get_tile_config(info, &gpu_info);
 	}
 
 	if (info->use_glamor) {
