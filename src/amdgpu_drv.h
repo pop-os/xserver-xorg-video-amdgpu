@@ -193,7 +193,7 @@ typedef struct {
 	EntityInfoPtr pEnt;
 	pciVideoPtr PciInfo;
 	int Chipset;
-	AMDGPUChipFamily ChipFamily;
+	uint32_t family;
 	struct gbm_device *gbm;
 
 	 Bool(*CloseScreen) (CLOSE_SCREEN_ARGS_DECL);

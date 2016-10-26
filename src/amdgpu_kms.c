@@ -53,7 +53,6 @@
 
 #include <X11/extensions/damageproto.h>
 
-#include "amdgpu_chipinfo_gen.h"
 #include "amdgpu_bo_helper.h"
 #include "amdgpu_pixmap.h"
 
@@ -1159,10 +1158,10 @@ static Bool AMDGPUPreInitAccel_KMS(ScrnInfoPtr pScrn)
 	return TRUE;
 }
 
-static Bool AMDGPUPreInitChipType_KMS(ScrnInfoPtr pScrn)
+static Bool AMDGPUPreInitChipType_KMS(ScrnInfoPtr pScrn,
+				      struct amdgpu_gpu_info *gpu_info)
 {
 	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
-	int i;
 
 	info->Chipset = PCI_DEV_DEVICE_ID(info->PciInfo);
 	pScrn->chipset =
@@ -1183,13 +1182,7 @@ static Bool AMDGPUPreInitChipType_KMS(ScrnInfoPtr pScrn)
 		   "Chipset: \"%s\" (ChipID = 0x%04x)\n",
 		   pScrn->chipset, info->Chipset);
 
-	for (i = 0; i < sizeof(AMDGPUCards) / sizeof(AMDGPUCardInfo); i++) {
-		if (info->Chipset == AMDGPUCards[i].pci_device_id) {
-			AMDGPUCardInfo *card = &AMDGPUCards[i];
-			info->ChipFamily = card->chip_family;
-			break;
-		}
-	}
+	info->family = gpu_info->family_id;
 
 	return TRUE;
 }
@@ -1332,7 +1325,7 @@ Bool AMDGPUPreInit_KMS(ScrnInfoPtr pScrn, int flags)
 	memset(&gpu_info, 0, sizeof(gpu_info));
 	amdgpu_query_gpu_info(pAMDGPUEnt->pDev, &gpu_info);
 
-	if (!AMDGPUPreInitChipType_KMS(pScrn))
+	if (!AMDGPUPreInitChipType_KMS(pScrn, &gpu_info))
 		goto fail;
 
 	info->dri2.available = FALSE;
@@ -1413,8 +1406,7 @@ Bool AMDGPUPreInit_KMS(ScrnInfoPtr pScrn, int flags)
 	else
 		pAMDGPUEnt->HasCRTC2 = TRUE;
 
-	if (info->ChipFamily >= CHIP_FAMILY_TAHITI &&
-	    info->ChipFamily <= CHIP_FAMILY_HAINAN) {
+	if (info->family < AMDGPU_FAMILY_CI) {
 		info->cursor_w = CURSOR_WIDTH;
 		info->cursor_h = CURSOR_HEIGHT;
 	} else {
