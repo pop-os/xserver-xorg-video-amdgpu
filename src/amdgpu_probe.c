@@ -44,7 +44,6 @@
 #include "amdgpu_probe.h"
 #include "amdgpu_version.h"
 #include "amdgpu_drv.h"
-#include "amdpciids.h"
 
 #include "xf86.h"
 
@@ -59,11 +58,10 @@
 #include <xf86platformBus.h>
 #endif
 
+#include "ati_pciids_gen.h"
 #include "amdgpu_chipset_gen.h"
 
 #include "amdgpu_pci_chipset_gen.h"
-
-#include "amdgpu_pci_device_match_gen.h"
 
 _X_EXPORT int gAMDGPUEntityIndex = -1;
 
@@ -380,6 +378,11 @@ error:
 	return FALSE;
 }
 #endif
+
+static const struct pci_id_match amdgpu_device_match[] = {
+    {0x1002, PCI_MATCH_ANY, PCI_MATCH_ANY, PCI_MATCH_ANY, 0, 0, 0},
+    {0, 0, 0},
+};
 
 _X_EXPORT DriverRec AMDGPU = {
 	AMDGPU_VERSION_CURRENT,
