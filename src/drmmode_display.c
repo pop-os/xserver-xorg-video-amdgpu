@@ -2479,12 +2479,15 @@ static void drmmode_handle_uevents(int fd, void *closure)
 	drmmode_ptr drmmode = closure;
 	ScrnInfoPtr scrn = drmmode->scrn;
 	struct udev_device *dev;
-	dev = udev_monitor_receive_device(drmmode->uevent_monitor);
-	if (!dev)
-		return;
+	Bool received = FALSE;
 
-	amdgpu_mode_hotplug(scrn, drmmode);
-	udev_device_unref(dev);
+	while ((dev = udev_monitor_receive_device(drmmode->uevent_monitor))) {
+		udev_device_unref(dev);
+		received = TRUE;
+	}
+
+	if (received)
+		amdgpu_mode_hotplug(scrn, drmmode);
 }
 #endif
 
