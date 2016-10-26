@@ -1235,9 +1235,9 @@ static void AMDGPUSetupCapabilities(ScrnInfoPtr pScrn)
 	ret = drmGetCap(pAMDGPUEnt->fd, DRM_CAP_PRIME, &value);
 	if (ret == 0) {
 		if (value & DRM_PRIME_CAP_EXPORT)
-			pScrn->capabilities |= RR_Capability_SourceOutput | RR_Capability_SinkOffload;
+			pScrn->capabilities |= RR_Capability_SourceOutput | RR_Capability_SourceOffload;
 		if (value & DRM_PRIME_CAP_IMPORT) {
-			pScrn->capabilities |= RR_Capability_SourceOffload;
+			pScrn->capabilities |= RR_Capability_SinkOffload;
 			if (info->drmmode.count_crtcs)
 				pScrn->capabilities |= RR_Capability_SinkOutput;
 		}
