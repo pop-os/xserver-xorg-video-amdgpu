@@ -1105,10 +1105,19 @@ static Bool drmmode_set_scanout_pixmap(xf86CrtcPtr crtc, PixmapPtr ppix)
 	AMDGPUInfoPtr info = AMDGPUPTR(crtc->scrn);
 
 	if (!ppix) {
-		if (crtc->randr_crtc->scanout_pixmap)
-			PixmapStopDirtyTracking(crtc->randr_crtc->scanout_pixmap,
-						drmmode_crtc->scanout[drmmode_crtc->scanout_id].pixmap);
-		drmmode_crtc_scanout_free(drmmode_crtc);
+		ScreenPtr screen = crtc->scrn->pScreen;
+		PixmapDirtyUpdatePtr dirty;
+
+		xorg_list_for_each_entry(dirty, &screen->pixmap_dirty_list, ent) {
+			if (dirty->slave_dst !=
+			    drmmode_crtc->scanout[drmmode_crtc->scanout_id].pixmap)
+				continue;
+
+			PixmapStopDirtyTracking(dirty->src, dirty->slave_dst);
+			drmmode_crtc_scanout_free(drmmode_crtc);
+			break;
+		}
+
 		return TRUE;
 	}
 
