@@ -68,7 +68,6 @@ EXTRA_DIST = \
 	amdgpu_version.h \
 	amdgpu_video.h \
 	simple_list.h \
-	amdpciids.h \
 	ati_pciids_gen.h \
 	amdgpu_chipinfo_gen.h \
 	amdgpu_chipset_gen.h \

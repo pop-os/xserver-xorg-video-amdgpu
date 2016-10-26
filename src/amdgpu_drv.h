@@ -86,7 +86,6 @@
 #include "compat-api.h"
 
 #include "simple_list.h"
-#include "amdpciids.h"
 
 struct _SyncFence;
 
@@ -191,7 +190,7 @@ struct amdgpu_client_priv {
 
 typedef struct {
 	EntityInfoPtr pEnt;
-	pciVideoPtr PciInfo;
+	struct pci_device *PciInfo;
 	int Chipset;
 	uint32_t family;
 	struct gbm_device *gbm;

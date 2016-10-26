@@ -41,8 +41,6 @@
 #include "shadow.h"
 #include <xf86Priv.h>
 
-#include "amdpciids.h"
-
 /* DPMS */
 #ifdef HAVE_XEXTPROTO_71
 #include <X11/extensions/dpmsconst.h>
@@ -1163,7 +1161,7 @@ static Bool AMDGPUPreInitChipType_KMS(ScrnInfoPtr pScrn,
 {
 	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
 
-	info->Chipset = PCI_DEV_DEVICE_ID(info->PciInfo);
+	info->Chipset = info->PciInfo->device_id;
 	pScrn->chipset =
 	    (char *)xf86TokenToString(AMDGPUChipsets, info->Chipset);
 	if (!pScrn->chipset) {
