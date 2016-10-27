@@ -262,6 +262,13 @@ amdgpu_present_check_flip(RRCrtcPtr crtc, WindowPtr window, PixmapPtr pixmap,
 	if (info->drmmode.dri2_flipping)
 		return FALSE;
 
+	/* The kernel driver doesn't handle flipping between BOs with different
+	 * tiling parameters correctly yet
+	 */
+	if (amdgpu_pixmap_get_tiling_info(pixmap) !=
+	    amdgpu_pixmap_get_tiling_info(screen->GetScreenPixmap(screen)))
+		return FALSE;
+
 	return amdgpu_present_check_unflip(scrn);
 }
 
