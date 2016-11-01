@@ -1245,8 +1245,6 @@ static void AMDGPUSetupCapabilities(ScrnInfoPtr pScrn)
 #endif
 }
 
-#if GET_ABI_MAJOR(ABI_VIDEODRV_VERSION) >= 10
-
 /* When the root window is created, initialize the screen contents from
  * console if -background none was specified on the command line
  */
@@ -1270,8 +1268,6 @@ static Bool AMDGPUCreateWindow_oneshot(WindowPtr pWin)
 
 	return ret;
 }
-
-#endif
 
 Bool AMDGPUPreInit_KMS(ScrnInfoPtr pScrn, int flags)
 {
@@ -1820,12 +1816,10 @@ Bool AMDGPUScreenInit_KMS(SCREEN_INIT_ARGS_DECL)
 	}
 	pScrn->pScreen = pScreen;
 
-#if GET_ABI_MAJOR(ABI_VIDEODRV_VERSION) >= 10
 	if (serverGeneration == 1 && bgNoneRoot && info->use_glamor) {
 		info->CreateWindow = pScreen->CreateWindow;
 		pScreen->CreateWindow = AMDGPUCreateWindow_oneshot;
 	}
-#endif
 
 	/* Provide SaveScreen & wrap BlockHandler and CloseScreen */
 	/* Wrap CloseScreen */
