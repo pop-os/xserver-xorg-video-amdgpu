@@ -1713,11 +1713,7 @@ Bool AMDGPUScreenInit_KMS(SCREEN_INIT_ARGS_DECL)
 	}
 #endif
 
-#if XORG_VERSION_CURRENT >= XORG_VERSION_NUMERIC(1,18,3,0,0)
-	value = TRUE;
-#else
-	value = FALSE;
-#endif
+	value = xorgGetVersion() >= XORG_VERSION_NUMERIC(1,18,3,0,0);
 	from = X_DEFAULT;
 
 	if (info->use_glamor) {
