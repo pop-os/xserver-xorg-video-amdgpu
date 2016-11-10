@@ -1313,6 +1313,11 @@ Bool AMDGPUPreInit_KMS(ScrnInfoPtr pScrn, int flags)
 		}
 	}
 
+	if (info->IsSecondary)
+		pAMDGPUEnt->secondary_scrn = pScrn;
+	else
+		pAMDGPUEnt->primary_scrn = pScrn;
+
 	info->PciInfo = xf86GetPciInfoForEntity(info->pEnt->index);
 	pScrn->monitor = pScrn->confScreen->monitor;
 
