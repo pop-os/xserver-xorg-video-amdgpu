@@ -1,9 +1,9 @@
-xserver-xorg-video-amdgpu (1.2.0-1) UNRELEASED; urgency=medium
+xserver-xorg-video-amdgpu (1.2.0-1) unstable; urgency=medium
 
   * New upstream release.
   * control: Bump policy to 3.9.8, no changes.
 
- -- Timo Aaltonen <tjaalton@debian.org>  Thu, 17 Nov 2016 11:08:55 +0200
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 17 Nov 2016 11:21:36 +0200
 
 xserver-xorg-video-amdgpu (1.1.2-1) unstable; urgency=medium
 
