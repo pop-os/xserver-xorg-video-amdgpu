@@ -73,10 +73,8 @@ Enable DRI2 page flipping.  The default is
 .B on.
 .TP
 .BI "Option \*qTearFree\*q \*q" boolean \*q
-Enable tearing prevention using the hardware page flipping mechanism. This
-option currently doesn't have any effect for CRTCs using transforms other than
-rotation or reflection. It requires allocating two separate scanout buffers for
-each supported CRTC. Enabling this option currently disables Option
+Enable tearing prevention using the hardware page flipping mechanism. Requires allocating two
+separate scanout buffers for each CRTC. Enabling this option currently disables Option
 \*qEnablePageFlip\*q. The default is
 .B off.
 .TP
@@ -120,7 +118,7 @@ http://cgit.freedesktop.org/xorg/driver/xf86-video-amdgpu/
 .IP " 3." 4
 Mailing list:
 .RS 4
-http://lists.x.org/mailman/listinfo/xorg-driver-ati
+http://lists.freedesktop.org/mailman/listinfo/amd-gfx
 .RE
 .IP " 4." 4
 IRC channel:
