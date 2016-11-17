@@ -1,0 +1,48 @@
+xserver-xorg-video-amdgpu (1.1.2-1) unstable; urgency=medium
+
+  * New upstream release.
+    - fix-configdir.diff: Dropped, fixed upstream
+
+  [ Julien Cristau ]
+  * Use https URL in debian/watch.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Fri, 16 Sep 2016 13:18:07 +0300
+
+xserver-xorg-video-amdgpu (1.1.1-1) unstable; urgency=medium
+
+  * New upstream release.
+  * fix-configdir.diff: Fix installing the config snippet.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 15 Sep 2016 23:55:07 +0300
+
+xserver-xorg-video-amdgpu (1.1.0-1) unstable; urgency=medium
+
+  * New upstream release.
+  * control: Bump policy to 3.9.7, no changes.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 07 Apr 2016 13:32:21 +0300
+
+xserver-xorg-video-amdgpu (1.0.1-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Mon, 22 Feb 2016 06:36:08 +0200
+
+xserver-xorg-video-amdgpu (1.0.0-1) unstable; urgency=medium
+
+  [ Andreas Boll ]
+  * First upstream release.
+  * Let uscan verify tarball signatures.
+  * Replace non-existing Suggests: linux-firmware with new firmware-amd-
+    graphics.
+  * Remove unused libpciaccess-dev build-dep.
+  * Update list of supported chips.
+  * Use https for Vcs-* fields.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Tue, 24 Nov 2015 15:46:07 +0200
+
+xserver-xorg-video-amdgpu (0.0.01~git20150807-1) unstable; urgency=low
+
+  * Initial release (Closes: #795686)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Sun, 16 Aug 2015 11:26:30 +0300
