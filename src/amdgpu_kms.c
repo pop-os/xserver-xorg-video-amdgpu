@@ -223,7 +223,7 @@ amdgpu_flush_callback(CallbackListPtr *list,
 
 static Bool AMDGPUCreateScreenResources_KMS(ScreenPtr pScreen)
 {
-	ExtensionEntry *damage_ext = CheckExtension("DAMAGE");
+	ExtensionEntry *damage_ext;
 	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
 	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
 	PixmapPtr pixmap;
@@ -277,7 +277,11 @@ static Bool AMDGPUCreateScreenResources_KMS(ScreenPtr pScreen)
 		amdgpu_glamor_create_screen_resources(pScreen);
 
 	info->callback_event_type = -1;
-	if (damage_ext) {
+	if (
+#ifdef AMDGPU_PIXMAP_SHARING
+		!pScreen->isGPU &&
+#endif
+		(damage_ext = CheckExtension("DAMAGE"))) {
 		info->callback_event_type = damage_ext->eventBase + XDamageNotify;
 
 		if (!AddCallback(&FlushCallback, amdgpu_flush_callback, pScrn))
