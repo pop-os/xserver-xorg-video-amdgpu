@@ -130,6 +130,16 @@ enum drmmode_flip_sync {
 };
 
 
+extern int drmmode_page_flip_target_absolute(AMDGPUEntPtr pAMDGPUEnt,
+					     drmmode_crtc_private_ptr drmmode_crtc,
+					     int fb_id, uint32_t flags,
+					     uintptr_t drm_queue_seq,
+					     uint32_t target_msc);
+extern int drmmode_page_flip_target_relative(AMDGPUEntPtr pAMDGPUEnt,
+					     drmmode_crtc_private_ptr drmmode_crtc,
+					     int fb_id, uint32_t flags,
+					     uintptr_t drm_queue_seq,
+					     uint32_t target_msc);
 extern Bool drmmode_pre_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode, int cpp);
 extern void drmmode_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode);
 extern void drmmode_fini(ScrnInfoPtr pScrn, drmmode_ptr drmmode);
@@ -153,7 +163,8 @@ Bool amdgpu_do_pageflip(ScrnInfoPtr scrn, ClientPtr client,
 			PixmapPtr new_front, uint64_t id, void *data,
 			int ref_crtc_hw_id, amdgpu_drm_handler_proc handler,
 			amdgpu_drm_abort_proc abort,
-			enum drmmode_flip_sync flip_sync);
+			enum drmmode_flip_sync flip_sync,
+			uint32_t target_msc);
 int drmmode_crtc_get_ust_msc(xf86CrtcPtr crtc, CARD64 *ust, CARD64 *msc);
 int drmmode_get_current_ust(int drm_fd, CARD64 * ust);
 

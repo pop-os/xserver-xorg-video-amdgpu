@@ -2132,6 +2132,59 @@ static void drm_wakeup_handler(pointer data, int err, pointer p)
 }
 #endif
 
+static Bool drmmode_probe_page_flip_target(AMDGPUEntPtr pAMDGPUEnt)
+{
+	uint64_t cap_value;
+
+	return drmGetCap(pAMDGPUEnt->fd, DRM_CAP_PAGE_FLIP_TARGET,
+			 &cap_value) == 0 && cap_value != 0;
+}
+
+static int
+drmmode_page_flip(AMDGPUEntPtr pAMDGPUEnt, drmmode_crtc_private_ptr drmmode_crtc,
+		  int fb_id, uint32_t flags, uintptr_t drm_queue_seq)
+{
+	flags |= DRM_MODE_PAGE_FLIP_EVENT;
+	return drmModePageFlip(pAMDGPUEnt->fd, drmmode_crtc->mode_crtc->crtc_id,
+			       fb_id, flags, (void*)drm_queue_seq);
+}
+
+int
+drmmode_page_flip_target_absolute(AMDGPUEntPtr pAMDGPUEnt,
+				  drmmode_crtc_private_ptr drmmode_crtc,
+				  int fb_id, uint32_t flags,
+				  uintptr_t drm_queue_seq, uint32_t target_msc)
+{
+	if (pAMDGPUEnt->has_page_flip_target) {
+		flags |= DRM_MODE_PAGE_FLIP_EVENT | DRM_MODE_PAGE_FLIP_TARGET_ABSOLUTE;
+		return drmModePageFlipTarget(pAMDGPUEnt->fd,
+					     drmmode_crtc->mode_crtc->crtc_id,
+					     fb_id, flags, (void*)drm_queue_seq,
+					     target_msc);
+	}
+
+	return drmmode_page_flip(pAMDGPUEnt, drmmode_crtc, fb_id, flags,
+				 drm_queue_seq);
+}
+
+int
+drmmode_page_flip_target_relative(AMDGPUEntPtr pAMDGPUEnt,
+				  drmmode_crtc_private_ptr drmmode_crtc,
+				  int fb_id, uint32_t flags,
+				  uintptr_t drm_queue_seq, uint32_t target_msc)
+{
+	if (pAMDGPUEnt->has_page_flip_target) {
+		flags |= DRM_MODE_PAGE_FLIP_EVENT | DRM_MODE_PAGE_FLIP_TARGET_RELATIVE;
+		return drmModePageFlipTarget(pAMDGPUEnt->fd,
+					     drmmode_crtc->mode_crtc->crtc_id,
+					     fb_id, flags, (void*)drm_queue_seq,
+					     target_msc);
+	}
+
+	return drmmode_page_flip(pAMDGPUEnt, drmmode_crtc, fb_id, flags,
+				 drm_queue_seq);
+}
+
 Bool drmmode_pre_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode, int cpp)
 {
 	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(pScrn);
@@ -2197,6 +2250,8 @@ Bool drmmode_pre_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode, int cpp)
 	drmmode->event_context.version = DRM_EVENT_CONTEXT_VERSION;
 	drmmode->event_context.vblank_handler = amdgpu_drm_queue_handler;
 	drmmode->event_context.page_flip_handler = amdgpu_drm_queue_handler;
+
+	pAMDGPUEnt->has_page_flip_target = drmmode_probe_page_flip_target(pAMDGPUEnt);
 
 	drmModeFreeResources(mode_res);
 	return TRUE;
@@ -2535,7 +2590,8 @@ Bool amdgpu_do_pageflip(ScrnInfoPtr scrn, ClientPtr client,
 			PixmapPtr new_front, uint64_t id, void *data,
 			int ref_crtc_hw_id, amdgpu_drm_handler_proc handler,
 			amdgpu_drm_abort_proc abort,
-			enum drmmode_flip_sync flip_sync)
+			enum drmmode_flip_sync flip_sync,
+			uint32_t target_msc)
 {
 	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(scrn);
 	xf86CrtcConfigPtr config = XF86_CRTC_CONFIG_PTR(scrn);
@@ -2543,7 +2599,7 @@ Bool amdgpu_do_pageflip(ScrnInfoPtr scrn, ClientPtr client,
 	drmmode_crtc_private_ptr drmmode_crtc = config->crtc[0]->driver_private;
 	drmmode_ptr drmmode = drmmode_crtc->drmmode;
 	int i;
-	uint32_t flip_flags = DRM_MODE_PAGE_FLIP_EVENT;
+	uint32_t flip_flags = flip_sync == FLIP_ASYNC ? DRM_MODE_PAGE_FLIP_ASYNC : 0;
 	drmmode_flipdata_ptr flipdata;
 	uintptr_t drm_queue_seq = 0;
 	uint32_t new_front_handle;
@@ -2585,9 +2641,6 @@ Bool amdgpu_do_pageflip(ScrnInfoPtr scrn, ClientPtr client,
 	flipdata->handler = handler;
 	flipdata->abort = abort;
 
-	if (flip_sync == FLIP_ASYNC)
-		flip_flags |= DRM_MODE_PAGE_FLIP_ASYNC;
-
 	for (i = 0; i < config->num_crtc; i++) {
 		crtc = config->crtc[i];
 
@@ -2613,19 +2666,33 @@ Bool amdgpu_do_pageflip(ScrnInfoPtr scrn, ClientPtr client,
 			goto error;
 		}
 
-		if (drmModePageFlip(pAMDGPUEnt->fd, drmmode_crtc->mode_crtc->crtc_id,
-				    drmmode->fb_id, flip_flags,
-				    (void*)drm_queue_seq)) {
-			xf86DrvMsg(scrn->scrnIndex, X_WARNING,
-				   "flip queue failed: %s\n", strerror(errno));
-			goto error;
+		if (drmmode_crtc->hw_id == ref_crtc_hw_id) {
+			if (drmmode_page_flip_target_absolute(pAMDGPUEnt,
+							      drmmode_crtc,
+							      drmmode->fb_id,
+							      flip_flags,
+							      drm_queue_seq,
+							      target_msc) != 0)
+				goto flip_error;
+		} else {
+			if (drmmode_page_flip_target_relative(pAMDGPUEnt,
+							      drmmode_crtc,
+							      drmmode->fb_id,
+							      flip_flags,
+							      drm_queue_seq, 0) != 0)
+				goto flip_error;
 		}
+
 		drmmode_crtc->flip_pending = TRUE;
 		drm_queue_seq = 0;
 	}
 
 	if (flipdata->flip_count > 0)
 		return TRUE;
+
+flip_error:
+	xf86DrvMsg(scrn->scrnIndex, X_WARNING, "flip queue failed: %s\n",
+		   strerror(errno));
 
 error:
 	if (flipdata && flipdata->flip_count <= 1) {

@@ -701,9 +701,9 @@ amdgpu_prime_scanout_flip(PixmapDirtyUpdatePtr ent)
 		return;
 	}
 
-	if (drmModePageFlip(pAMDGPUEnt->fd, drmmode_crtc->mode_crtc->crtc_id,
-			    drmmode_crtc->scanout[scanout_id].fb_id,
-			    DRM_MODE_PAGE_FLIP_EVENT, (void*)drm_queue_seq)) {
+	if (drmmode_page_flip_target_relative(pAMDGPUEnt, drmmode_crtc,
+					      drmmode_crtc->scanout[scanout_id].fb_id,
+					      0, drm_queue_seq, 0) != 0) {
 		xf86DrvMsg(scrn->scrnIndex, X_WARNING, "flip queue failed in %s: %s\n",
 			   __func__, strerror(errno));
 		return;
@@ -949,8 +949,8 @@ amdgpu_scanout_flip(ScreenPtr pScreen, AMDGPUInfoPtr info,
 					xf86CrtcPtr xf86_crtc)
 {
 	drmmode_crtc_private_ptr drmmode_crtc = xf86_crtc->driver_private;
-	ScrnInfoPtr scrn;
-	AMDGPUEntPtr pAMDGPUEnt;
+	ScrnInfoPtr scrn = xf86_crtc->scrn;
+	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(scrn);
 	uintptr_t drm_queue_seq;
 	unsigned scanout_id;
 
@@ -961,7 +961,6 @@ amdgpu_scanout_flip(ScreenPtr pScreen, AMDGPUInfoPtr info,
 	if (!amdgpu_scanout_do_update(xf86_crtc, scanout_id))
 		return;
 
-	scrn = xf86_crtc->scrn;
 	drm_queue_seq = amdgpu_drm_queue_alloc(xf86_crtc,
 					       AMDGPU_DRM_QUEUE_CLIENT_DEFAULT,
 					       AMDGPU_DRM_QUEUE_ID_DEFAULT,
@@ -973,10 +972,9 @@ amdgpu_scanout_flip(ScreenPtr pScreen, AMDGPUInfoPtr info,
 		return;
 	}
 
-	pAMDGPUEnt = AMDGPUEntPriv(scrn);
-	if (drmModePageFlip(pAMDGPUEnt->fd, drmmode_crtc->mode_crtc->crtc_id,
-			    drmmode_crtc->scanout[scanout_id].fb_id,
-			    DRM_MODE_PAGE_FLIP_EVENT, (void*)drm_queue_seq)) {
+	if (drmmode_page_flip_target_relative(pAMDGPUEnt, drmmode_crtc,
+					      drmmode_crtc->scanout[scanout_id].fb_id,
+					      0, drm_queue_seq, 0) != 0) {
 		xf86DrvMsg(scrn->scrnIndex, X_WARNING, "flip queue failed in %s: %s\n",
 			   __func__, strerror(errno));
 		return;
