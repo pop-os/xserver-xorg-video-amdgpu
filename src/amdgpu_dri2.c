@@ -784,14 +784,8 @@ drmVBlankSeqType amdgpu_populate_vbl_request_type(xf86CrtcPtr crtc)
 	if (crtc_id == 1)
 		type |= DRM_VBLANK_SECONDARY;
 	else if (crtc_id > 1)
-#ifdef DRM_VBLANK_HIGH_CRTC_SHIFT
 		type |= (crtc_id << DRM_VBLANK_HIGH_CRTC_SHIFT) &
 		    DRM_VBLANK_HIGH_CRTC_MASK;
-#else
-		ErrorF("amdgpu driver bug: %s called for CRTC %d > 1, but "
-		       "DRM_VBLANK_HIGH_CRTC_MASK not defined at build time\n",
-		       __func__, crtc_id);
-#endif
 
 	return type;
 }
@@ -1366,7 +1360,6 @@ Bool amdgpu_dri2_screen_init(ScreenPtr pScreen)
 	dri2_info.CopyRegion = amdgpu_dri2_copy_region;
 
 	if (info->drmmode.count_crtcs > 2) {
-#ifdef DRM_CAP_VBLANK_HIGH_CRTC
 		uint64_t cap_value;
 
 		if (drmGetCap
@@ -1381,12 +1374,6 @@ Bool amdgpu_dri2_screen_init(ScreenPtr pScreen)
 				   "handle VBLANKs on CRTC > 1\n");
 			scheduling_works = FALSE;
 		}
-#else
-		xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
-			   "You need to rebuild against a "
-			   "newer libdrm to handle VBLANKs on CRTC > 1\n");
-		scheduling_works = FALSE;
-#endif
 	}
 
 	if (scheduling_works) {

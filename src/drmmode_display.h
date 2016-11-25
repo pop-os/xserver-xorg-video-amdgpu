@@ -36,10 +36,6 @@
 #include "amdgpu_probe.h"
 #include "amdgpu.h"
 
-#ifndef DRM_CAP_TIMESTAMP_MONOTONIC
-#define DRM_CAP_TIMESTAMP_MONOTONIC 0x6
-#endif
-
 typedef struct {
 	unsigned fb_id;
 	drmModeFBPtr mode_fb;
