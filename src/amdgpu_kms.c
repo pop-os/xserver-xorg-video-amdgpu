@@ -237,10 +237,7 @@ static Bool AMDGPUCreateScreenResources_KMS(ScreenPtr pScreen)
 	if (dixPrivateKeyRegistered(rrPrivKey)) {
 		rrScrPrivPtr rrScrPriv = rrGetScrPriv(pScreen);
 
-		if (
-#ifdef AMDGPU_PIXMAP_SHARING
-		    !pScreen->isGPU &&
-#endif
+		if (!amdgpu_is_gpu_screen(pScreen) &&
 		    !rrScrPriv->primaryOutput)
 		{
 			xf86CrtcConfigPtr xf86_config = XF86_CRTC_CONFIG_PTR(pScrn);
@@ -277,10 +274,7 @@ static Bool AMDGPUCreateScreenResources_KMS(ScreenPtr pScreen)
 		amdgpu_glamor_create_screen_resources(pScreen);
 
 	info->callback_event_type = -1;
-	if (
-#ifdef AMDGPU_PIXMAP_SHARING
-		!pScreen->isGPU &&
-#endif
+	if (!amdgpu_is_gpu_screen(pScreen) &&
 		(damage_ext = CheckExtension("DAMAGE"))) {
 		info->callback_event_type = damage_ext->eventBase + XDamageNotify;
 
@@ -1001,9 +995,7 @@ static void AMDGPUBlockHandler_KMS(BLOCKHANDLER_ARGS_DECL)
 	(*pScreen->BlockHandler) (BLOCKHANDLER_ARGS);
 	pScreen->BlockHandler = AMDGPUBlockHandler_KMS;
 
-#ifdef AMDGPU_PIXMAP_SHARING
-	if (!pScreen->isGPU)
-#endif
+	if (!amdgpu_is_gpu_screen(pScreen))
 	{
 		for (c = 0; c < xf86_config->num_crtc; c++) {
 			if (info->tear_free)
