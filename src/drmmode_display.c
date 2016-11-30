@@ -663,6 +663,7 @@ drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(pScrn);
 	xf86CrtcConfigPtr xf86_config = XF86_CRTC_CONFIG_PTR(crtc->scrn);
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
+	unsigned scanout_id = drmmode_crtc->scanout_id ^ info->tear_free;
 	drmmode_ptr drmmode = drmmode_crtc->drmmode;
 	int saved_x, saved_y;
 	Rotation saved_rotation;
@@ -714,7 +715,7 @@ drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 		fb_id = drmmode->fb_id;
 #ifdef AMDGPU_PIXMAP_SHARING
 		if (crtc->randr_crtc && crtc->randr_crtc->scanout_pixmap) {
-			fb_id = drmmode_crtc->scanout[0].fb_id;
+			fb_id = drmmode_crtc->scanout[scanout_id].fb_id;
 			x = y = 0;
 		} else
 #endif
@@ -758,11 +759,10 @@ drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 				pBox->x2 = max(pBox->x2, pScrn->virtualX);
 				pBox->y2 = max(pBox->y2, pScrn->virtualY);
 
-				drmmode_crtc->scanout_id = 0;
-				fb_id = drmmode_crtc->scanout[0].fb_id;
+				fb_id = drmmode_crtc->scanout[scanout_id].fb_id;
 				x = y = 0;
 
-				amdgpu_scanout_update_handler(crtc, 0, 0, drmmode_crtc);
+				amdgpu_scanout_do_update(crtc, scanout_id);
 				amdgpu_glamor_finish(pScrn);
 			}
 		}
@@ -845,7 +845,7 @@ done:
 	} else {
 		crtc->active = TRUE;
 
-		if (fb_id != drmmode_crtc->scanout[0].fb_id)
+		if (fb_id != drmmode_crtc->scanout[scanout_id].fb_id)
 			drmmode_crtc_scanout_free(drmmode_crtc);
 	}
 
@@ -1096,13 +1096,13 @@ drmmode_crtc_gamma_set(xf86CrtcPtr crtc, uint16_t * red, uint16_t * green,
 static Bool drmmode_set_scanout_pixmap(xf86CrtcPtr crtc, PixmapPtr ppix)
 {
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
+	unsigned scanout_id = drmmode_crtc->scanout_id;
 	AMDGPUInfoPtr info = AMDGPUPTR(crtc->scrn);
 	ScreenPtr screen = crtc->scrn->pScreen;
 	PixmapDirtyUpdatePtr dirty;
 
 	xorg_list_for_each_entry(dirty, &screen->pixmap_dirty_list, ent) {
-		if (dirty->slave_dst !=
-		    drmmode_crtc->scanout[drmmode_crtc->scanout_id].pixmap)
+		if (dirty->slave_dst != drmmode_crtc->scanout[scanout_id].pixmap)
 			continue;
 
 		PixmapStopDirtyTracking(dirty->src, dirty->slave_dst);
@@ -1127,13 +1127,13 @@ static Bool drmmode_set_scanout_pixmap(xf86CrtcPtr crtc, PixmapPtr ppix)
 	}
 
 #ifdef HAS_DIRTYTRACKING_ROTATION
-	PixmapStartDirtyTracking(ppix, drmmode_crtc->scanout[0].pixmap,
+	PixmapStartDirtyTracking(ppix, drmmode_crtc->scanout[scanout_id].pixmap,
 				 0, 0, 0, 0, RR_Rotate_0);
 #elif defined(HAS_DIRTYTRACKING2)
-	PixmapStartDirtyTracking2(ppix, drmmode_crtc->scanout[0].pixmap,
+	PixmapStartDirtyTracking2(ppix, drmmode_crtc->scanout[scanout_id].pixmap,
 				  0, 0, 0, 0);
 #else
-	PixmapStartDirtyTracking(ppix, drmmode_crtc->scanout[0].pixmap, 0, 0);
+	PixmapStartDirtyTracking(ppix, drmmode_crtc->scanout[scanout_id].pixmap, 0, 0);
 #endif
 	return TRUE;
 }

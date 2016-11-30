@@ -582,7 +582,7 @@ amdgpu_prime_scanout_do_update(xf86CrtcPtr crtc, unsigned scanout_id)
 	return ret;
 }
 
-void
+static void
 amdgpu_prime_scanout_update_handler(xf86CrtcPtr crtc, uint32_t frame, uint64_t usec,
 				     void *event_data)
 {
@@ -757,7 +757,7 @@ amdgpu_dirty_update(ScrnInfoPtr scrn)
 }
 #endif
 
-static Bool
+Bool
 amdgpu_scanout_do_update(xf86CrtcPtr xf86_crtc, int scanout_id)
 {
 	drmmode_crtc_private_ptr drmmode_crtc = xf86_crtc->driver_private;
@@ -863,7 +863,7 @@ amdgpu_scanout_update_abort(xf86CrtcPtr crtc, void *event_data)
 	drmmode_crtc->scanout_update_pending = FALSE;
 }
 
-void
+static void
 amdgpu_scanout_update_handler(xf86CrtcPtr crtc, uint32_t frame, uint64_t usec,
 							  void *event_data)
 {

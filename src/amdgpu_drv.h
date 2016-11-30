@@ -292,8 +292,7 @@ typedef struct {
 Bool amdgpu_dri3_screen_init(ScreenPtr screen);
 
 /* amdgpu_kms.c */
-void amdgpu_scanout_update_handler(xf86CrtcPtr crtc, uint32_t frame,
-				   uint64_t usec, void *event_data);
+Bool amdgpu_scanout_do_update(xf86CrtcPtr xf86_crtc, int scanout_id);
 
 /* amdgpu_present.c */
 Bool amdgpu_present_screen_init(ScreenPtr screen);
