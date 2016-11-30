@@ -714,6 +714,7 @@ amdgpu_prime_scanout_flip(PixmapDirtyUpdatePtr ent)
 					      0, drm_queue_seq, 0) != 0) {
 		xf86DrvMsg(scrn->scrnIndex, X_WARNING, "flip queue failed in %s: %s\n",
 			   __func__, strerror(errno));
+		amdgpu_drm_abort_entry(drm_queue_seq);
 		return;
 	}
 
@@ -985,6 +986,7 @@ amdgpu_scanout_flip(ScreenPtr pScreen, AMDGPUInfoPtr info,
 					      0, drm_queue_seq, 0) != 0) {
 		xf86DrvMsg(scrn->scrnIndex, X_WARNING, "flip queue failed in %s: %s\n",
 			   __func__, strerror(errno));
+		amdgpu_drm_abort_entry(drm_queue_seq);
 		return;
 	}
 
