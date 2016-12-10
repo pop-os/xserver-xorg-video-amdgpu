@@ -241,15 +241,13 @@ error_amdgpu:
 	return FALSE;
 }
 
-static Bool amdgpu_get_scrninfo(int entity_num, struct pci_device *pci_dev)
+static Bool
+amdgpu_probe(ScrnInfoPtr pScrn, int entity_num,
+	     struct pci_device *pci_dev, struct xf86_platform_device *dev)
 {
-	ScrnInfoPtr pScrn = NULL;
 	EntityInfoPtr pEnt = NULL;
 	DevUnion *pPriv;
 	AMDGPUEntPtr pAMDGPUEnt;
-
-	pScrn = xf86ConfigPciEntity(pScrn, 0, entity_num, NULL,
-				    NULL, NULL, NULL, NULL, NULL);
 
 	if (!pScrn)
 		return FALSE;
@@ -258,7 +256,6 @@ static Bool amdgpu_get_scrninfo(int entity_num, struct pci_device *pci_dev)
 	pScrn->driverName = AMDGPU_DRIVER_NAME;
 	pScrn->name = AMDGPU_NAME;
 	pScrn->Probe = NULL;
-
 	pScrn->PreInit = AMDGPUPreInit_KMS;
 	pScrn->ScreenInit = AMDGPUScreenInit_KMS;
 	pScrn->SwitchMode = AMDGPUSwitchMode_KMS;
@@ -286,7 +283,7 @@ static Bool amdgpu_get_scrninfo(int entity_num, struct pci_device *pci_dev)
 			goto error;
 
 		pAMDGPUEnt = pPriv->ptr;
-		if (!amdgpu_device_setup(pScrn, pci_dev, NULL, pAMDGPUEnt))
+		if (!amdgpu_device_setup(pScrn, pci_dev, dev, pAMDGPUEnt))
 			goto error;
 
 		pAMDGPUEnt->fd_ref = 1;
@@ -321,7 +318,10 @@ static Bool
 amdgpu_pci_probe(DriverPtr pDriver,
 		 int entity_num, struct pci_device *device, intptr_t match_data)
 {
-	return amdgpu_get_scrninfo(entity_num, device);
+	ScrnInfoPtr pScrn = xf86ConfigPciEntity(NULL, 0, entity_num, NULL,
+						NULL, NULL, NULL, NULL, NULL);
+
+	return amdgpu_probe(pScrn, entity_num, device, NULL);
 }
 
 static Bool AMDGPUDriverFunc(ScrnInfoPtr scrn, xorgDriverFuncOp op, void *data)
@@ -350,9 +350,6 @@ amdgpu_platform_probe(DriverPtr pDriver,
 {
 	ScrnInfoPtr pScrn;
 	int scr_flags = 0;
-	EntityInfoPtr pEnt = NULL;
-	DevUnion *pPriv;
-	AMDGPUEntPtr pAMDGPUEnt;
 
 	if (!dev->pdev)
 		return FALSE;
@@ -365,65 +362,7 @@ amdgpu_platform_probe(DriverPtr pDriver,
 		xf86SetEntityShared(entity_num);
 	xf86AddEntityToScreen(pScrn, entity_num);
 
-	pScrn->driverVersion = AMDGPU_VERSION_CURRENT;
-	pScrn->driverName = AMDGPU_DRIVER_NAME;
-	pScrn->name = AMDGPU_NAME;
-	pScrn->Probe = NULL;
-	pScrn->PreInit = AMDGPUPreInit_KMS;
-	pScrn->ScreenInit = AMDGPUScreenInit_KMS;
-	pScrn->SwitchMode = AMDGPUSwitchMode_KMS;
-	pScrn->AdjustFrame = AMDGPUAdjustFrame_KMS;
-	pScrn->EnterVT = AMDGPUEnterVT_KMS;
-	pScrn->LeaveVT = AMDGPULeaveVT_KMS;
-	pScrn->FreeScreen = AMDGPUFreeScreen_KMS;
-	pScrn->ValidMode = AMDGPUValidMode;
-
-	pEnt = xf86GetEntityInfo(entity_num);
-
-	/* Create a AMDGPUEntity for all chips, even with old single head
-	 * Radeon, need to use pAMDGPUEnt for new monitor detection routines.
-	 */
-	xf86SetEntitySharable(entity_num);
-
-	if (gAMDGPUEntityIndex == -1)
-		gAMDGPUEntityIndex = xf86AllocateEntityPrivateIndex();
-
-	pPriv = xf86GetEntityPrivate(pEnt->index, gAMDGPUEntityIndex);
-
-	if (!pPriv->ptr) {
-
-		pPriv->ptr = xnfcalloc(sizeof(AMDGPUEntRec), 1);
-
-		pAMDGPUEnt = pPriv->ptr;
-		if (!amdgpu_device_setup(pScrn, NULL, dev, pAMDGPUEnt))
-			goto error;
-
-		pAMDGPUEnt->fd_ref = 1;
-
-	} else {
-		pAMDGPUEnt = pPriv->ptr;
-
-		if (pAMDGPUEnt->fd_ref == ARRAY_SIZE(pAMDGPUEnt->scrn)) {
-			xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-				   "Only up to %u Zaphod instances supported\n",
-				   (unsigned)ARRAY_SIZE(pAMDGPUEnt->scrn));
-			goto error;
-		}
-
-		pAMDGPUEnt->fd_ref++;
-	}
-
-	xf86SetEntityInstanceForScreen(pScrn, pEnt->index,
-				       xf86GetNumEntityInstances(pEnt->
-								 index)
-				       - 1);
-	free(pEnt);
-
-	return TRUE;
-
-error:
-	free(pEnt);
-	return FALSE;
+	return amdgpu_probe(pScrn, entity_num, NULL, dev);
 }
 #endif
 
