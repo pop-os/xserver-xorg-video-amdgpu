@@ -93,20 +93,20 @@ static char *amdgpu_bus_id(ScrnInfoPtr pScrn, struct pci_device *dev)
 
 static Bool amdgpu_kernel_mode_enabled(ScrnInfoPtr pScrn, char *busIdString)
 {
+#if defined(__FreeBSD__) || defined(__FreeBSD_kernel__)
 	int ret = drmCheckModesettingSupported(busIdString);
 
-#if defined(__FreeBSD__) || defined(__FreeBSD_kernel__)
 	if (ret) {
 		if (xf86LoadKernelModule("amdgpukms"))
 			ret = drmCheckModesettingSupported(busIdString);
 	}
-#endif
 	if (ret) {
 		xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, 0,
 			       "[KMS] drm report modesetting isn't supported.\n");
 		return FALSE;
 	}
 
+#endif
 	xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, 0,
 		       "[KMS] Kernel modesetting enabled.\n");
 	return TRUE;
