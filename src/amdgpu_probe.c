@@ -33,6 +33,8 @@
 #include <errno.h>
 #include <string.h>
 #include <stdlib.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 /*
  * Authors:
@@ -115,17 +117,27 @@ static int amdgpu_kernel_open_fd(ScrnInfoPtr pScrn,
 				 struct xf86_platform_device *platform_dev)
 {
 	struct pci_device *dev;
+	const char *path;
 	char *busid;
 	int fd;
 
-#ifdef ODEV_ATTRIB_FD
 	if (platform_dev) {
+#ifdef ODEV_ATTRIB_FD
 		fd = xf86_get_platform_device_int_attrib(platform_dev,
 							 ODEV_ATTRIB_FD, -1);
 		if (fd != -1)
 			return fd;
-	}
 #endif
+
+#ifdef ODEV_ATTRIB_PATH
+		path = xf86_get_platform_device_attrib(platform_dev,
+						       ODEV_ATTRIB_PATH);
+
+		fd = open(path, O_RDWR | O_CLOEXEC);
+		if (fd != -1)
+			return fd;
+#endif
+	}
 
 	if (platform_dev)
 		dev = platform_dev->pdev;
