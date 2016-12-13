@@ -68,6 +68,7 @@ typedef struct {
 	ScrnInfoPtr primary_scrn;
 	ScrnInfoPtr secondary_scrn;
 	struct xf86_platform_device *platform_dev;
+	char *render_node;
 } AMDGPUEntRec, *AMDGPUEntPtr;
 
 extern const OptionInfoRec *AMDGPUOptionsWeak(void);
