@@ -494,58 +494,15 @@ drmmode_scanout_free(ScrnInfoPtr scrn)
 		drmmode_crtc_scanout_free(xf86_config->crtc[c]->driver_private);
 }
 
-static void *
-drmmode_crtc_scanout_allocate(xf86CrtcPtr crtc,
-			      struct drmmode_scanout *scanout,
-			      int width, int height, int *pitch)
+static PixmapPtr
+drmmode_crtc_scanout_create(xf86CrtcPtr crtc, struct drmmode_scanout *scanout,
+			    int width, int height)
 {
 	ScrnInfoPtr pScrn = crtc->scrn;
 	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(pScrn);
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
 	drmmode_ptr drmmode = drmmode_crtc->drmmode;
-	int ret;
 	union gbm_bo_handle bo_handle;
-
-	if (scanout->bo) {
-		if (scanout->width == width && scanout->height == height)
-			return scanout->bo;
-
-		drmmode_crtc_scanout_destroy(drmmode, scanout);
-	}
-
-	scanout->bo = amdgpu_alloc_pixmap_bo(pScrn, width, height,
-					     pScrn->depth, 0,
-					     pScrn->bitsPerPixel, pitch);
-	if (!scanout->bo) {
-		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-			   "Failed to allocate rotation buffer memory\n");
-		return NULL;
-	}
-
-	bo_handle = gbm_bo_get_handle(scanout->bo->bo.gbm);
-	ret = drmModeAddFB(pAMDGPUEnt->fd, width, height, pScrn->depth,
-			   pScrn->bitsPerPixel, *pitch,
-			   bo_handle.u32, &scanout->fb_id);
-	if (ret) {
-		ErrorF("failed to add rotate fb\n");
-		amdgpu_bo_unref(&scanout->bo);
-		scanout->bo = NULL;
-		return NULL;
-	}
-
-	scanout->width = width;
-	scanout->height = height;
-	return scanout->bo;
-}
-
-static PixmapPtr
-drmmode_crtc_scanout_create(xf86CrtcPtr crtc,
-			    struct drmmode_scanout *scanout,
-			    int width, int height)
-{
-	ScrnInfoPtr pScrn = crtc->scrn;
-	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
-	drmmode_ptr drmmode = drmmode_crtc->drmmode;
 	int pitch;
 
 	if (scanout->pixmap) {
@@ -555,10 +512,21 @@ drmmode_crtc_scanout_create(xf86CrtcPtr crtc,
 		drmmode_crtc_scanout_destroy(drmmode, scanout);
 	}
 
+	scanout->bo = amdgpu_alloc_pixmap_bo(pScrn, width, height,
+					     pScrn->depth, 0,
+					     pScrn->bitsPerPixel, &pitch);
 	if (!scanout->bo) {
-		if (!drmmode_crtc_scanout_allocate(crtc, scanout, width, height,
-						   &pitch))
-			return NULL;
+		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+			   "Failed to allocate scanout buffer memory\n");
+		goto error;
+	}
+
+	bo_handle = gbm_bo_get_handle(scanout->bo->bo.gbm);
+	if (drmModeAddFB(pAMDGPUEnt->fd, width, height, pScrn->depth,
+			 pScrn->bitsPerPixel, pitch,
+			 bo_handle.u32, &scanout->fb_id) != 0) {
+		ErrorF("failed to add scanout fb\n");
+		goto error;
 	}
 
 	scanout->pixmap = drmmode_create_bo_pixmap(pScrn,
@@ -566,12 +534,17 @@ drmmode_crtc_scanout_create(xf86CrtcPtr crtc,
 						 pScrn->depth,
 						 pScrn->bitsPerPixel,
 						 pitch, scanout->bo);
-	if (scanout->pixmap == NULL) {
+	if (scanout->pixmap) {
+		scanout->width = width;
+		scanout->height = height;
+	} else {
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-			   "Couldn't allocate shadow pixmap for rotated CRTC\n");
+			   "Couldn't allocate scanout pixmap for CRTC\n");
+error:
+		drmmode_crtc_scanout_destroy(drmmode, scanout);
 	}
-	return scanout->pixmap;
 
+	return scanout->pixmap;
 }
 
 static void
