@@ -589,22 +589,20 @@ drmmode_can_use_hw_cursor(xf86CrtcPtr crtc)
 
 #if XF86_CRTC_VERSION >= 4
 
+#if XF86_CRTC_VERSION < 7
+#define XF86DriverTransformOutput TRUE
+#define XF86DriverTransformNone FALSE
+#endif
+
 static Bool
 drmmode_handle_transform(xf86CrtcPtr crtc)
 {
 	Bool ret;
 
-#if XF86_CRTC_VERSION >= 7
 	if (crtc->transformPresent || crtc->rotation != RR_Rotate_0)
 	    crtc->driverIsPerformingTransform = XF86DriverTransformOutput;
 	else
 	    crtc->driverIsPerformingTransform = XF86DriverTransformNone;
-#else
-	AMDGPUInfoPtr info = AMDGPUPTR(crtc->scrn);
-
-	crtc->driverIsPerformingTransform = crtc->transformPresent ||
-		(info->tear_free && crtc->rotation != RR_Rotate_0);
-#endif
 
 	ret = xf86CrtcRotate(crtc);
 
