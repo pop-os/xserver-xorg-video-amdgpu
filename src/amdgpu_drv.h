@@ -221,7 +221,7 @@ typedef struct {
 	Bool use_glamor;
 	Bool force_accel;
 	Bool shadow_primary;
-	Bool tear_free;
+	int tear_free;
 
 	/* general */
 	OptionInfoPtr Options;

@@ -51,6 +51,7 @@
 #include "amdgpu_list.h"
 
 #include <xf86Priv.h>
+#include <X11/extensions/dpmsconst.h>
 
 #if DRI2INFOREC_VERSION >= 9
 #define USE_DRI2_PRIME
@@ -637,13 +638,34 @@ can_flip(ScrnInfoPtr pScrn, DrawablePtr draw,
 	 DRI2BufferPtr front, DRI2BufferPtr back)
 {
 	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
+	xf86CrtcConfigPtr config = XF86_CRTC_CONFIG_PTR(pScrn);
+	int num_crtcs_on;
+	int i;
 
-	return draw->type == DRAWABLE_WINDOW &&
-	    info->allowPageFlip &&
-	    !info->hwcursor_disabled &&
-	    !info->drmmode.present_flipping &&
-	    pScrn->vtSema &&
-	    DRI2CanFlip(draw) && can_exchange(pScrn, draw, front, back);
+	if (draw->type != DRAWABLE_WINDOW ||
+	    !info->allowPageFlip ||
+	    info->hwcursor_disabled ||
+	    info->drmmode.present_flipping ||
+	    !pScrn->vtSema ||
+	    !DRI2CanFlip(draw))
+		return FALSE;
+
+	for (i = 0, num_crtcs_on = 0; i < config->num_crtc; i++) {
+		xf86CrtcPtr crtc = config->crtc[i];
+		drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
+
+		if (!crtc->enabled)
+			continue;
+
+		if (!drmmode_crtc || drmmode_crtc->rotate.bo ||
+			drmmode_crtc->scanout[0].bo)
+			return FALSE;
+
+		if (drmmode_crtc->pending_dpms_mode == DPMSModeOn)
+			num_crtcs_on++;
+	}
+
+	return num_crtcs_on > 0 && can_exchange(pScrn, draw, front, back);
 }
 
 static void
