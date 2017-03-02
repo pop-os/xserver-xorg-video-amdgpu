@@ -465,9 +465,9 @@ xf86CrtcPtr amdgpu_dri2_drawable_crtc(DrawablePtr pDraw, Bool consider_disabled)
 static void
 amdgpu_dri2_flip_event_abort(xf86CrtcPtr crtc, void *event_data)
 {
-	AMDGPUInfoPtr info = AMDGPUPTR(crtc->scrn);
+	if (crtc)
+		AMDGPUPTR(crtc->scrn)->drmmode.dri2_flipping = FALSE;
 
-	info->drmmode.dri2_flipping = FALSE;
 	free(event_data);
 }
 
