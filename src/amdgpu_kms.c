@@ -1035,8 +1035,10 @@ static void AMDGPUBlockHandler_KMS(BLOCKHANDLER_ARGS_DECL)
 		}
 	}
 
+#if XORG_VERSION_CURRENT < XORG_VERSION_NUMERIC(1,19,0,0,0)
 	if (info->use_glamor)
 		amdgpu_glamor_flush(pScrn);
+#endif
 
 #ifdef AMDGPU_PIXMAP_SHARING
 	amdgpu_dirty_update(pScrn);
