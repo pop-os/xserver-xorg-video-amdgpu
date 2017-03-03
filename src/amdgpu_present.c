@@ -366,6 +366,7 @@ amdgpu_present_unflip(ScreenPtr screen, uint64_t event_id)
 	event->event_id = event_id;
 	event->unflip = TRUE;
 
+	amdgpu_glamor_flush(scrn);
 	if (amdgpu_do_pageflip(scrn, AMDGPU_DRM_QUEUE_CLIENT_DEFAULT, pixmap,
 			       event_id, event, -1, amdgpu_present_flip_event,
 			       amdgpu_present_flip_abort, FLIP_VSYNC, 0))
