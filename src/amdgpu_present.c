@@ -351,6 +351,7 @@ amdgpu_present_unflip(ScreenPtr screen, uint64_t event_id)
 	xf86CrtcConfigPtr config = XF86_CRTC_CONFIG_PTR(scrn);
 	struct amdgpu_present_vblank_event *event;
 	PixmapPtr pixmap = screen->GetScreenPixmap(screen);
+	int old_fb_id;
 	int i;
 
 	if (!amdgpu_present_check_unflip(scrn))
@@ -374,7 +375,7 @@ modeset:
 	/* info->drmmode.fb_id still points to the FB for the last flipped BO.
 	 * Clear it, drmmode_set_mode_major will re-create it
 	 */
-	drmModeRmFB(pAMDGPUEnt->fd, info->drmmode.fb_id);
+	old_fb_id = info->drmmode.fb_id;
 	info->drmmode.fb_id = 0;
 
 	for (i = 0; i < config->num_crtc; i++) {
@@ -391,6 +392,7 @@ modeset:
 			drmmode_crtc->need_modeset = TRUE;
 	}
 
+	drmModeRmFB(pAMDGPUEnt->fd, old_fb_id);
 	present_event_notify(event_id, 0, 0);
 	info->drmmode.present_flipping = FALSE;
 }
