@@ -1039,17 +1039,6 @@ static void AMDGPUBlockHandler_KMS(BLOCKHANDLER_ARGS_DECL)
 #endif
 }
 
-static void AMDGPUBlockHandler_oneshot(BLOCKHANDLER_ARGS_DECL)
-{
-	SCREEN_PTR(arg);
-	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
-
-	AMDGPUBlockHandler_KMS(BLOCKHANDLER_ARGS);
-
-	drmmode_set_desired_modes(pScrn, &info->drmmode, TRUE);
-}
-
 /* This is called by AMDGPUPreInit to set up the default visual */
 static Bool AMDGPUPreInitVisual(ScrnInfoPtr pScrn)
 {
@@ -1264,6 +1253,31 @@ static Bool AMDGPUCreateWindow_oneshot(WindowPtr pWin)
 		drmmode_copy_fb(pScrn, &info->drmmode);
 
 	return ret;
+}
+
+/* When the root window is mapped, set the initial modes */
+static void AMDGPUWindowExposures_oneshot(WindowPtr pWin, RegionPtr pRegion
+#if XORG_VERSION_CURRENT < XORG_VERSION_NUMERIC(1,16,99,901,0)
+					  , RegionPtr pBSRegion
+#endif
+	)
+{
+	ScreenPtr pScreen = pWin->drawable.pScreen;
+	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
+	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
+
+	if (pWin != pScreen->root)
+		ErrorF("%s called for non-root window %p\n", __func__, pWin);
+
+	pScreen->WindowExposures = info->WindowExposures;
+#if XORG_VERSION_CURRENT < XORG_VERSION_NUMERIC(1,16,99,901,0)
+	pScreen->WindowExposures(pWin, pRegion, pBSRegion);
+#else
+	pScreen->WindowExposures(pWin, pRegion);
+#endif
+
+	amdgpu_glamor_finish(pScrn);
+	drmmode_set_desired_modes(pScrn, &info->drmmode, TRUE);
 }
 
 Bool AMDGPUPreInit_KMS(ScrnInfoPtr pScrn, int flags)
@@ -1824,6 +1838,8 @@ Bool AMDGPUScreenInit_KMS(SCREEN_INIT_ARGS_DECL)
 		info->CreateWindow = pScreen->CreateWindow;
 		pScreen->CreateWindow = AMDGPUCreateWindow_oneshot;
 	}
+	info->WindowExposures = pScreen->WindowExposures;
+	pScreen->WindowExposures = AMDGPUWindowExposures_oneshot;
 
 	/* Provide SaveScreen & wrap BlockHandler and CloseScreen */
 	/* Wrap CloseScreen */
@@ -1831,7 +1847,7 @@ Bool AMDGPUScreenInit_KMS(SCREEN_INIT_ARGS_DECL)
 	pScreen->CloseScreen = AMDGPUCloseScreen_KMS;
 	pScreen->SaveScreen = AMDGPUSaveScreen_KMS;
 	info->BlockHandler = pScreen->BlockHandler;
-	pScreen->BlockHandler = AMDGPUBlockHandler_oneshot;
+	pScreen->BlockHandler = AMDGPUBlockHandler_KMS;
 
 	info->CreateScreenResources = pScreen->CreateScreenResources;
 	pScreen->CreateScreenResources = AMDGPUCreateScreenResources_KMS;
