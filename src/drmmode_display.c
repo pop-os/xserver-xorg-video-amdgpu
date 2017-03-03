@@ -429,8 +429,6 @@ void drmmode_copy_fb(ScrnInfoPtr pScrn, drmmode_ptr drmmode)
 
 	FreeScratchGC(gc);
 
-	amdgpu_glamor_finish(pScrn);
-
 	pScreen->canDoBGNoneRoot = TRUE;
 
 	if (info->fbcon_pixmap)
