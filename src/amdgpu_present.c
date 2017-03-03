@@ -48,6 +48,8 @@
 
 #include "present.h"
 
+static present_screen_info_rec amdgpu_present_screen_info;
+
 struct amdgpu_present_vblank_event {
 	uint64_t event_id;
 	Bool unflip;
@@ -351,6 +353,9 @@ amdgpu_present_unflip(ScreenPtr screen, uint64_t event_id)
 	xf86CrtcConfigPtr config = XF86_CRTC_CONFIG_PTR(scrn);
 	struct amdgpu_present_vblank_event *event;
 	PixmapPtr pixmap = screen->GetScreenPixmap(screen);
+	enum drmmode_flip_sync flip_sync =
+		(amdgpu_present_screen_info.capabilities & PresentCapabilityAsync) ?
+		FLIP_ASYNC : FLIP_VSYNC;
 	int old_fb_id;
 	int i;
 
@@ -369,7 +374,7 @@ amdgpu_present_unflip(ScreenPtr screen, uint64_t event_id)
 	amdgpu_glamor_flush(scrn);
 	if (amdgpu_do_pageflip(scrn, AMDGPU_DRM_QUEUE_CLIENT_DEFAULT, pixmap,
 			       event_id, event, -1, amdgpu_present_flip_event,
-			       amdgpu_present_flip_abort, FLIP_VSYNC, 0))
+			       amdgpu_present_flip_abort, flip_sync, 0))
 		return;
 
 modeset:
