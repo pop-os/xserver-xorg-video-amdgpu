@@ -327,6 +327,8 @@ amdgpu_present_flip(RRCrtcPtr crtc, uint64_t event_id, uint64_t target_msc,
 
 	event->event_id = event_id;
 
+	amdgpu_glamor_flush(scrn);
+
 	ret = amdgpu_do_pageflip(scrn, AMDGPU_DRM_QUEUE_CLIENT_DEFAULT,
 				 pixmap, event_id, event, crtc_id,
 				 amdgpu_present_flip_event,
