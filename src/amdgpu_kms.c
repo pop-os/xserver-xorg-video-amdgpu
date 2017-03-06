@@ -132,12 +132,7 @@ static void AMDGPUFreeRec(ScrnInfoPtr pScrn)
 		pAMDGPUEnt->fd_ref--;
 		if (!pAMDGPUEnt->fd_ref) {
 			amdgpu_device_deinitialize(pAMDGPUEnt->pDev);
-#ifdef XF86_PDEV_SERVER_FD
-			if (!(pAMDGPUEnt->platform_dev &&
-			      pAMDGPUEnt->platform_dev->flags & XF86_PDEV_SERVER_FD))
-#endif
-				drmClose(pAMDGPUEnt->fd);
-			pAMDGPUEnt->fd = 0;
+			amdgpu_kernel_close_fd(pAMDGPUEnt);
 		}
 	}
 

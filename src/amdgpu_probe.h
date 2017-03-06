@@ -71,6 +71,8 @@ typedef struct {
 	char *render_node;
 } AMDGPUEntRec, *AMDGPUEntPtr;
 
+extern void amdgpu_kernel_close_fd(AMDGPUEntPtr pAMDGPUEnt);
+
 extern const OptionInfoRec *AMDGPUOptionsWeak(void);
 
 extern Bool AMDGPUPreInit_KMS(ScrnInfoPtr, int);

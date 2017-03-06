@@ -134,6 +134,16 @@ static int amdgpu_kernel_open_fd(ScrnInfoPtr pScrn, char *busid,
 	return fd;
 }
 
+void amdgpu_kernel_close_fd(AMDGPUEntPtr pAMDGPUEnt)
+{
+#ifdef XF86_PDEV_SERVER_FD
+	if (!(pAMDGPUEnt->platform_dev &&
+	      pAMDGPUEnt->platform_dev->flags & XF86_PDEV_SERVER_FD))
+#endif
+		drmClose(pAMDGPUEnt->fd);
+	pAMDGPUEnt->fd = -1;
+}
+
 static Bool amdgpu_open_drm_master(ScrnInfoPtr pScrn, AMDGPUEntPtr pAMDGPUEnt,
 				   char *busid)
 {
