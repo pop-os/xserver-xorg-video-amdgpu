@@ -248,7 +248,7 @@ static Bool AMDGPUCreateScreenResources_KMS(ScreenPtr pScreen)
 		}
 	}
 
-	if (!drmmode_set_desired_modes(pScrn, &info->drmmode, pScrn->is_gpu))
+	if (!drmmode_set_desired_modes(pScrn, &info->drmmode, FALSE))
 		return FALSE;
 
 	drmmode_uevent_init(pScrn, &info->drmmode);
