@@ -169,8 +169,10 @@ typedef enum {
 #if XF86_CRTC_VERSION >= 5
 #define AMDGPU_PIXMAP_SHARING 1
 #define amdgpu_is_gpu_screen(screen) (screen)->isGPU
+#define amdgpu_is_gpu_scrn(scrn) (scrn)->is_gpu
 #else
 #define amdgpu_is_gpu_screen(screen) 0
+#define amdgpu_is_gpu_scrn(scrn) 0
 #endif
 
 #define AMDGPU_VSYNC_TIMEOUT	20000	/* Maximum wait for VSYNC (in usecs) */

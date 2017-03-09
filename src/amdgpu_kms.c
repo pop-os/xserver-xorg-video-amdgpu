@@ -1397,23 +1397,26 @@ Bool AMDGPUPreInit_KMS(ScrnInfoPtr pScrn, int flags)
 			xf86DrvMsg(pScrn->scrnIndex, X_CONFIG, "ShadowPrimary enabled\n");
 	}
 
-	sw_cursor = xf86ReturnOptValBool(info->Options, OPTION_SW_CURSOR, FALSE);
+	if (!amdgpu_is_gpu_scrn(pScrn)) {
+		sw_cursor = xf86ReturnOptValBool(info->Options,
+						 OPTION_SW_CURSOR, FALSE);
 
-	info->allowPageFlip = xf86ReturnOptValBool(info->Options,
-						   OPTION_PAGE_FLIP,
-						   TRUE);
-	if (sw_cursor || info->shadow_primary) {
-		xf86DrvMsg(pScrn->scrnIndex,
-			   info->allowPageFlip ? X_WARNING : X_DEFAULT,
-			   "KMS Pageflipping: disabled%s\n",
-			   info->allowPageFlip ?
-			   (sw_cursor ? " because of SWcursor" :
-			    " because of ShadowPrimary") : "");
-		info->allowPageFlip = FALSE;
-	} else {
-		xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-			   "KMS Pageflipping: %sabled\n",
-			   info->allowPageFlip ? "en" : "dis");
+		info->allowPageFlip = xf86ReturnOptValBool(info->Options,
+							   OPTION_PAGE_FLIP,
+							   TRUE);
+		if (sw_cursor || info->shadow_primary) {
+			xf86DrvMsg(pScrn->scrnIndex,
+				   info->allowPageFlip ? X_WARNING : X_DEFAULT,
+				   "KMS Pageflipping: disabled%s\n",
+				   info->allowPageFlip ?
+				   (sw_cursor ? " because of SWcursor" :
+				    " because of ShadowPrimary") : "");
+			info->allowPageFlip = FALSE;
+		} else {
+			xf86DrvMsg(pScrn->scrnIndex, X_INFO,
+				   "KMS Pageflipping: %sabled\n",
+				   info->allowPageFlip ? "en" : "dis");
+		}
 	}
 
 	if (xf86ReturnOptValBool(info->Options, OPTION_DELETE_DP12, FALSE)) {
@@ -1736,30 +1739,32 @@ Bool AMDGPUScreenInit_KMS(SCREEN_INIT_ARGS_DECL)
 	}
 #endif
 
-	value = xorgGetVersion() >= XORG_VERSION_NUMERIC(1,18,3,0,0);
-	from = X_DEFAULT;
+	if (!amdgpu_is_gpu_screen(pScreen)) {
+		value = xorgGetVersion() >= XORG_VERSION_NUMERIC(1,18,3,0,0);
+		from = X_DEFAULT;
 
-	if (info->use_glamor) {
-		if (xf86GetOptValBool(info->Options, OPTION_DRI3, &value))
-			from = X_CONFIG;
+		if (info->use_glamor) {
+			if (xf86GetOptValBool(info->Options, OPTION_DRI3, &value))
+				from = X_CONFIG;
 
-		if (xf86GetOptValInteger(info->Options, OPTION_DRI, &driLevel) &&
-			(driLevel == 2 || driLevel == 3)) {
-			from = X_CONFIG;
-			value = driLevel == 3;
+			if (xf86GetOptValInteger(info->Options, OPTION_DRI, &driLevel) &&
+			    (driLevel == 2 || driLevel == 3)) {
+				from = X_CONFIG;
+				value = driLevel == 3;
+			}
 		}
+
+		if (value) {
+			value = amdgpu_sync_init(pScreen) &&
+				amdgpu_present_screen_init(pScreen) &&
+				amdgpu_dri3_screen_init(pScreen);
+
+			if (!value)
+				from = X_WARNING;
+		}
+
+		xf86DrvMsg(pScrn->scrnIndex, from, "DRI3 %sabled\n", value ? "en" : "dis");
 	}
-
-	if (value) {
-		value = amdgpu_sync_init(pScreen) &&
-			amdgpu_present_screen_init(pScreen) &&
-			amdgpu_dri3_screen_init(pScreen);
-
-		if (!value)
-			from = X_WARNING;
-	}
-
-	xf86DrvMsg(pScrn->scrnIndex, from, "DRI3 %sabled\n", value ? "en" : "dis");
 
 	pScrn->vtSema = TRUE;
 	xf86SetBackingStore(pScreen);
@@ -1819,7 +1824,8 @@ Bool AMDGPUScreenInit_KMS(SCREEN_INIT_ARGS_DECL)
 	 */
 	/* xf86DiDGAInit(pScreen, info->LinearAddr + pScrn->fbOffset); */
 #endif
-	if (info->shadow_fb == FALSE) {
+	if (info->shadow_fb == FALSE &&
+	    !amdgpu_is_gpu_screen(pScreen)) {
 		/* Init Xv */
 		xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, AMDGPU_LOGLEVEL_DEBUG,
 			       "Initializing Xv\n");
@@ -1835,12 +1841,14 @@ Bool AMDGPUScreenInit_KMS(SCREEN_INIT_ARGS_DECL)
 	}
 	pScrn->pScreen = pScreen;
 
-	if (serverGeneration == 1 && bgNoneRoot && info->use_glamor) {
-		info->CreateWindow = pScreen->CreateWindow;
-		pScreen->CreateWindow = AMDGPUCreateWindow_oneshot;
+	if (!amdgpu_is_gpu_screen(pScreen)) {
+		if (serverGeneration == 1 && bgNoneRoot && info->use_glamor) {
+			info->CreateWindow = pScreen->CreateWindow;
+			pScreen->CreateWindow = AMDGPUCreateWindow_oneshot;
+		}
+		info->WindowExposures = pScreen->WindowExposures;
+		pScreen->WindowExposures = AMDGPUWindowExposures_oneshot;
 	}
-	info->WindowExposures = pScreen->WindowExposures;
-	pScreen->WindowExposures = AMDGPUWindowExposures_oneshot;
 
 	/* Provide SaveScreen & wrap BlockHandler and CloseScreen */
 	/* Wrap CloseScreen */
