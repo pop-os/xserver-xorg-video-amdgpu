@@ -779,6 +779,12 @@ drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 	drmModeModeInfo kmode;
 	uint32_t bo_handle;
 
+	/* The root window contents may be undefined before the WindowExposures
+	 * hook is called for it, so bail if we get here before that
+	 */
+	if (pScreen->WindowExposures == AMDGPUWindowExposures_oneshot)
+		return FALSE;
+
 	saved_mode = crtc->mode;
 	saved_x = crtc->x;
 	saved_y = crtc->y;
