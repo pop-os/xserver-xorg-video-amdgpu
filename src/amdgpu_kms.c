@@ -1796,7 +1796,7 @@ Bool AMDGPUScreenInit_KMS(SCREEN_INIT_ARGS_DECL)
 			xf86DrvMsg(pScrn->scrnIndex, X_INFO, "3D acceleration disabled\n");
 		xf86DrvMsg(pScrn->scrnIndex, X_INFO, "2D acceleration disabled\n");
 	} else {
-		xf86DrvMsg(pScrn->scrnIndex, X_INFO, "2D and 3D cceleration disabled\n");
+		xf86DrvMsg(pScrn->scrnIndex, X_INFO, "2D and 3D acceleration disabled\n");
 	}
 
 	/* Init DPMS */
