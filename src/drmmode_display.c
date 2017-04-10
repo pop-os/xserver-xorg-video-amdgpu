@@ -2362,7 +2362,7 @@ Bool drmmode_pre_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode, int cpp)
 
 	xf86InitialConfiguration(pScrn, TRUE);
 
-	drmmode->event_context.version = DRM_EVENT_CONTEXT_VERSION;
+	drmmode->event_context.version = 2;
 	drmmode->event_context.vblank_handler = amdgpu_drm_queue_handler;
 	drmmode->event_context.page_flip_handler = amdgpu_drm_queue_handler;
 
