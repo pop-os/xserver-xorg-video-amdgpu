@@ -448,7 +448,7 @@ dirty_region(PixmapDirtyUpdatePtr dirty)
 static void
 redisplay_dirty(PixmapDirtyUpdatePtr dirty, RegionPtr region)
 {
-	ScrnInfoPtr scrn = xf86ScreenToScrn(dirty->src->drawable.pScreen);
+	ScrnInfoPtr scrn = xf86ScreenToScrn(dirty->slave_dst->drawable.pScreen);
 
 	if (RegionNil(region))
 		goto out;
@@ -481,12 +481,12 @@ amdgpu_prime_scanout_update_abort(xf86CrtcPtr crtc, void *event_data)
 void
 amdgpu_sync_shared_pixmap(PixmapDirtyUpdatePtr dirty)
 {
-	ScreenPtr master_screen = dirty->src->master_pixmap->drawable.pScreen;
+	ScreenPtr master_screen = amdgpu_dirty_master(dirty);
 	PixmapDirtyUpdatePtr ent;
 	RegionPtr region;
 
 	xorg_list_for_each_entry(ent, &master_screen->pixmap_dirty_list, ent) {
-		if (ent->slave_dst != dirty->src)
+		if (!amdgpu_dirty_src_equals(dirty, ent->slave_dst))
 			continue;
 
 		region = dirty_region(ent);
@@ -501,7 +501,7 @@ amdgpu_sync_shared_pixmap(PixmapDirtyUpdatePtr dirty)
 static Bool
 master_has_sync_shared_pixmap(ScrnInfoPtr scrn, PixmapDirtyUpdatePtr dirty)
 {
-	ScreenPtr master_screen = dirty->src->master_pixmap->drawable.pScreen;
+	ScreenPtr master_screen = amdgpu_dirty_master(dirty);
 
 	return master_screen->SyncSharedPixmap != NULL;
 }
@@ -517,7 +517,7 @@ slave_has_sync_shared_pixmap(ScrnInfoPtr scrn, PixmapDirtyUpdatePtr dirty)
 static void
 call_sync_shared_pixmap(PixmapDirtyUpdatePtr dirty)
 {
-	ScreenPtr master_screen = dirty->src->master_pixmap->drawable.pScreen;
+	ScreenPtr master_screen = amdgpu_dirty_master(dirty);
 
 	master_screen->SyncSharedPixmap(dirty);
 }
@@ -527,7 +527,7 @@ call_sync_shared_pixmap(PixmapDirtyUpdatePtr dirty)
 static Bool
 master_has_sync_shared_pixmap(ScrnInfoPtr scrn, PixmapDirtyUpdatePtr dirty)
 {
-	ScrnInfoPtr master_scrn = xf86ScreenToScrn(dirty->src->master_pixmap->drawable.pScreen);
+	ScrnInfoPtr master_scrn = xf86ScreenToScrn(amdgpu_dirty_master(dirty));
 
 	return master_scrn->driverName == scrn->driverName;
 }
@@ -562,7 +562,7 @@ amdgpu_prime_dirty_to_crtc(PixmapDirtyUpdatePtr dirty)
 		xf86CrtcPtr xf86_crtc = xf86_config->crtc[c];
 		drmmode_crtc_private_ptr drmmode_crtc = xf86_crtc->driver_private;
 
-		if (drmmode_crtc->prime_scanout_pixmap == dirty->src)
+		if (amdgpu_dirty_src_equals(dirty, drmmode_crtc->prime_scanout_pixmap))
 			return xf86_crtc;
 	}
 
@@ -579,7 +579,7 @@ amdgpu_prime_scanout_do_update(xf86CrtcPtr crtc, unsigned scanout_id)
 	Bool ret = FALSE;
 
 	xorg_list_for_each_entry(dirty, &screen->pixmap_dirty_list, ent) {
-		if (dirty->src == drmmode_crtc->prime_scanout_pixmap) {
+		if (amdgpu_dirty_src_equals(dirty, drmmode_crtc->prime_scanout_pixmap)) {
 			RegionPtr region;
 
 			if (master_has_sync_shared_pixmap(scrn, dirty))
@@ -756,10 +756,10 @@ amdgpu_dirty_update(ScrnInfoPtr scrn)
 			PixmapDirtyUpdatePtr region_ent = ent;
 
 			if (master_has_sync_shared_pixmap(scrn, ent)) {
-				ScreenPtr master_screen = ent->src->master_pixmap->drawable.pScreen;
+				ScreenPtr master_screen = amdgpu_dirty_master(ent);
 
 				xorg_list_for_each_entry(region_ent, &master_screen->pixmap_dirty_list, ent) {
-					if (region_ent->slave_dst == ent->src)
+					if (amdgpu_dirty_src_equals(ent, region_ent->slave_dst))
 						break;
 				}
 			}

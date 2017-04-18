@@ -170,6 +170,32 @@ typedef enum {
 #define AMDGPU_PIXMAP_SHARING 1
 #define amdgpu_is_gpu_screen(screen) (screen)->isGPU
 #define amdgpu_is_gpu_scrn(scrn) (scrn)->is_gpu
+
+static inline ScreenPtr
+amdgpu_dirty_master(PixmapDirtyUpdatePtr dirty)
+{
+#ifdef HAS_DIRTYTRACKING_DRAWABLE_SRC
+	ScreenPtr screen = dirty->src->pScreen;
+#else
+	ScreenPtr screen = dirty->src->drawable.pScreen;
+#endif
+
+	if (screen->current_master)
+		return screen->current_master;
+
+	return screen;
+}
+
+static inline Bool
+amdgpu_dirty_src_equals(PixmapDirtyUpdatePtr dirty, PixmapPtr pixmap)
+{
+#ifdef HAS_DIRTYTRACKING_DRAWABLE_SRC
+	return dirty->src == &pixmap->drawable;
+#else
+	return dirty->src == pixmap;
+#endif
+}
+
 #else
 #define amdgpu_is_gpu_screen(screen) 0
 #define amdgpu_is_gpu_scrn(scrn) 0
