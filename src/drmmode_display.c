@@ -2370,7 +2370,6 @@ Bool drmmode_pre_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode, int cpp)
 	xf86CrtcConfigInit(pScrn, &drmmode_xf86crtc_config_funcs);
 
 	drmmode->scrn = pScrn;
-	drmmode->cpp = cpp;
 	mode_res = drmModeGetResources(pAMDGPUEnt->fd);
 	if (!mode_res)
 		return FALSE;

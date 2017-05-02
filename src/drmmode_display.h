@@ -38,8 +38,6 @@
 
 typedef struct {
 	unsigned fb_id;
-	drmModeFBPtr mode_fb;
-	int cpp;
 	ScrnInfoPtr scrn;
 #ifdef HAVE_LIBUDEV
 	struct udev_monitor *uevent_monitor;
@@ -55,7 +53,6 @@ typedef struct {
 } drmmode_rec, *drmmode_ptr;
 
 typedef struct {
-	int fd;
 	unsigned old_fb_id;
 	int flip_count;
 	void *event_data;
