@@ -1741,7 +1741,10 @@ Bool AMDGPUScreenInit_KMS(SCREEN_INIT_ARGS_DECL)
 #endif
 
 	if (!amdgpu_is_gpu_screen(pScreen)) {
-		value = xorgGetVersion() >= XORG_VERSION_NUMERIC(1,18,3,0,0);
+		if (xorgGetVersion() >= XORG_VERSION_NUMERIC(1,18,3,0,0))
+			value = info->use_glamor;
+		else
+			value = FALSE;
 		from = X_DEFAULT;
 
 		if (info->use_glamor) {
