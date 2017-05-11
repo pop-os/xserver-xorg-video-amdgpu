@@ -675,6 +675,18 @@ amdgpu_prime_scanout_flip_abort(xf86CrtcPtr crtc, void *event_data)
 }
 
 static void
+amdgpu_prime_scanout_flip_handler(xf86CrtcPtr crtc, uint32_t msc, uint64_t usec,
+				  void *event_data)
+{
+	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(crtc->scrn);
+	drmmode_crtc_private_ptr drmmode_crtc = event_data;
+
+	drmmode_fb_reference(pAMDGPUEnt->fd, &drmmode_crtc->fb,
+			     drmmode_crtc->flip_pending);
+	amdgpu_prime_scanout_flip_abort(crtc, event_data);
+}
+
+static void
 amdgpu_prime_scanout_flip(PixmapDirtyUpdatePtr ent)
 {
 	ScreenPtr screen = ent->slave_dst->drawable.pScreen;
@@ -701,7 +713,8 @@ amdgpu_prime_scanout_flip(PixmapDirtyUpdatePtr ent)
 	drm_queue_seq = amdgpu_drm_queue_alloc(crtc,
 					       AMDGPU_DRM_QUEUE_CLIENT_DEFAULT,
 					       AMDGPU_DRM_QUEUE_ID_DEFAULT,
-					       drmmode_crtc, NULL,
+					       drmmode_crtc,
+					       amdgpu_prime_scanout_flip_handler,
 					       amdgpu_prime_scanout_flip_abort);
 	if (drm_queue_seq == AMDGPU_DRM_QUEUE_ERROR) {
 		xf86DrvMsg(scrn->scrnIndex, X_WARNING,
@@ -709,8 +722,17 @@ amdgpu_prime_scanout_flip(PixmapDirtyUpdatePtr ent)
 		return;
 	}
 
+	drmmode_crtc->flip_pending =
+		amdgpu_pixmap_get_fb(drmmode_crtc->scanout[scanout_id].pixmap);
+	if (!drmmode_crtc->flip_pending) {
+		xf86DrvMsg(scrn->scrnIndex, X_WARNING,
+			   "Failed to get FB for PRIME flip.\n");
+		amdgpu_drm_abort_entry(drm_queue_seq);
+		return;
+	}
+
 	if (drmmode_page_flip_target_relative(pAMDGPUEnt, drmmode_crtc,
-					      drmmode_crtc->scanout[scanout_id].fb_id,
+					      drmmode_crtc->flip_pending->handle,
 					      0, drm_queue_seq, 0) != 0) {
 		xf86DrvMsg(scrn->scrnIndex, X_WARNING, "flip queue failed in %s: %s\n",
 			   __func__, strerror(errno));
@@ -720,7 +742,6 @@ amdgpu_prime_scanout_flip(PixmapDirtyUpdatePtr ent)
 
 	drmmode_crtc->scanout_id = scanout_id;
 	drmmode_crtc->scanout_update_pending = TRUE;
-	drmmode_crtc->flip_pending = TRUE;
 }
 
 static void
@@ -950,10 +971,14 @@ amdgpu_scanout_update(xf86CrtcPtr xf86_crtc)
 static void
 amdgpu_scanout_flip_abort(xf86CrtcPtr crtc, void *event_data)
 {
-	drmmode_crtc_private_ptr drmmode_crtc = event_data;
+	amdgpu_prime_scanout_flip_abort(crtc, event_data);
+}
 
-	drmmode_crtc->scanout_update_pending = FALSE;
-	drmmode_clear_pending_flip(crtc);
+static void
+amdgpu_scanout_flip_handler(xf86CrtcPtr crtc, uint32_t msc, uint64_t usec,
+			    void *event_data)
+{
+	amdgpu_prime_scanout_flip_handler(crtc, msc, usec, event_data);
 }
 
 static void
@@ -977,7 +1002,8 @@ amdgpu_scanout_flip(ScreenPtr pScreen, AMDGPUInfoPtr info,
 	drm_queue_seq = amdgpu_drm_queue_alloc(xf86_crtc,
 					       AMDGPU_DRM_QUEUE_CLIENT_DEFAULT,
 					       AMDGPU_DRM_QUEUE_ID_DEFAULT,
-					       drmmode_crtc, NULL,
+					       drmmode_crtc,
+					       amdgpu_scanout_flip_handler,
 					       amdgpu_scanout_flip_abort);
 	if (drm_queue_seq == AMDGPU_DRM_QUEUE_ERROR) {
 		xf86DrvMsg(scrn->scrnIndex, X_WARNING,
@@ -985,8 +1011,17 @@ amdgpu_scanout_flip(ScreenPtr pScreen, AMDGPUInfoPtr info,
 		return;
 	}
 
+	drmmode_crtc->flip_pending =
+		amdgpu_pixmap_get_fb(drmmode_crtc->scanout[scanout_id].pixmap);
+	if (!drmmode_crtc->flip_pending) {
+		xf86DrvMsg(scrn->scrnIndex, X_WARNING,
+			   "Failed to get FB for scanout flip.\n");
+		amdgpu_drm_abort_entry(drm_queue_seq);
+		return;
+	}
+
 	if (drmmode_page_flip_target_relative(pAMDGPUEnt, drmmode_crtc,
-					      drmmode_crtc->scanout[scanout_id].fb_id,
+					      drmmode_crtc->flip_pending->handle,
 					      0, drm_queue_seq, 0) != 0) {
 		xf86DrvMsg(scrn->scrnIndex, X_WARNING, "flip queue failed in %s: %s\n",
 			   __func__, strerror(errno));
@@ -996,13 +1031,13 @@ amdgpu_scanout_flip(ScreenPtr pScreen, AMDGPUInfoPtr info,
 
 	drmmode_crtc->scanout_id = scanout_id;
 	drmmode_crtc->scanout_update_pending = TRUE;
-	drmmode_crtc->flip_pending = TRUE;
 }
 
 static void AMDGPUBlockHandler_KMS(BLOCKHANDLER_ARGS_DECL)
 {
 	SCREEN_PTR(arg);
 	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
+	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(pScrn);
 	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
 	xf86CrtcConfigPtr xf86_config = XF86_CRTC_CONFIG_PTR(pScrn);
 	int c;
@@ -1010,6 +1045,23 @@ static void AMDGPUBlockHandler_KMS(BLOCKHANDLER_ARGS_DECL)
 	pScreen->BlockHandler = info->BlockHandler;
 	(*pScreen->BlockHandler) (BLOCKHANDLER_ARGS);
 	pScreen->BlockHandler = AMDGPUBlockHandler_KMS;
+
+	if (!pScrn->vtSema) {
+#if XORG_VERSION_CURRENT < XORG_VERSION_NUMERIC(1,19,0,0,0)
+		if (info->use_glamor)
+			amdgpu_glamor_flush(pScrn);
+#endif
+
+		for (c = 0; c < xf86_config->num_crtc; c++) {
+			drmmode_crtc_private_ptr drmmode_crtc =
+				xf86_config->crtc[c]->driver_private;
+
+			drmmode_fb_reference(pAMDGPUEnt->fd, &drmmode_crtc->fb,
+					     NULL);
+		}
+
+		return;
+	}
 
 	if (!amdgpu_is_gpu_screen(pScreen))
 	{

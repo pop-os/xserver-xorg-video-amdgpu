@@ -35,6 +35,7 @@ struct amdgpu_pixmap {
 	uint64_t tiling_info;
 
 	struct amdgpu_buffer *bo;
+	struct drmmode_fb *fb;
 
 	/* GEM handle for pixmaps shared via DRI2/3 */
 	Bool handle_valid;
@@ -56,6 +57,8 @@ static inline void amdgpu_set_pixmap_private(PixmapPtr pixmap,
 
 static inline Bool amdgpu_set_pixmap_bo(PixmapPtr pPix, struct amdgpu_buffer *bo)
 {
+	ScrnInfoPtr scrn = xf86ScreenToScrn(pPix->drawable.pScreen);
+	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(scrn);
 	struct amdgpu_pixmap *priv;
 
 	priv = amdgpu_get_pixmap_private(pPix);
@@ -70,6 +73,8 @@ static inline Bool amdgpu_set_pixmap_bo(PixmapPtr pPix, struct amdgpu_buffer *bo
 			amdgpu_bo_unref(&priv->bo);
 			priv->handle_valid = FALSE;
 		}
+
+		drmmode_fb_reference(pAMDGPUEnt->fd, &priv->fb, NULL);
 
 		if (!bo) {
 			free(priv);
@@ -96,6 +101,59 @@ static inline struct amdgpu_buffer *amdgpu_get_pixmap_bo(PixmapPtr pPix)
 	struct amdgpu_pixmap *priv;
 	priv = amdgpu_get_pixmap_private(pPix);
 	return priv ? priv->bo : NULL;
+}
+
+static inline struct drmmode_fb*
+amdgpu_fb_create(int drm_fd, uint32_t width, uint32_t height, uint8_t depth,
+		 uint8_t bpp, uint32_t pitch, uint32_t handle)
+{
+	struct drmmode_fb *fb  = malloc(sizeof(*fb));
+
+	if (!fb)
+		return NULL;
+
+	fb->refcnt = 1;
+	if (drmModeAddFB(drm_fd, width, height, depth, bpp, pitch, handle,
+			 &fb->handle) == 0)
+		return fb;
+
+	free(fb);
+	return NULL;
+}
+
+static inline struct drmmode_fb*
+amdgpu_pixmap_create_fb(int drm_fd, PixmapPtr pix)
+{
+	uint32_t handle;
+
+	if (!amdgpu_pixmap_get_handle(pix, &handle))
+		return NULL;
+
+	return amdgpu_fb_create(drm_fd, pix->drawable.width, pix->drawable.height,
+				pix->drawable.depth, pix->drawable.bitsPerPixel,
+				pix->devKind, handle);
+}
+
+static inline struct drmmode_fb*
+amdgpu_pixmap_get_fb(PixmapPtr pix)
+{
+	ScrnInfoPtr scrn = xf86ScreenToScrn(pix->drawable.pScreen);
+	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(scrn);
+	AMDGPUInfoPtr info = AMDGPUPTR(scrn);
+
+	if (info->use_glamor) {
+		struct amdgpu_pixmap *priv = amdgpu_get_pixmap_private(pix);
+
+		if (!priv)
+			return NULL;
+
+		if (!priv->fb)
+			priv->fb = amdgpu_pixmap_create_fb(pAMDGPUEnt->fd, pix);
+
+		return priv->fb;
+	}
+
+	return NULL;
 }
 
 enum {

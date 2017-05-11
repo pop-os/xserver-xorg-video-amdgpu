@@ -37,7 +37,6 @@
 #include "amdgpu.h"
 
 typedef struct {
-	unsigned fb_id;
 	ScrnInfoPtr scrn;
 #ifdef HAVE_LIBUDEV
 	struct udev_monitor *uevent_monitor;
@@ -53,7 +52,6 @@ typedef struct {
 } drmmode_rec, *drmmode_ptr;
 
 typedef struct {
-	unsigned old_fb_id;
 	int flip_count;
 	void *event_data;
 	unsigned int fe_frame;
@@ -63,10 +61,14 @@ typedef struct {
 	amdgpu_drm_abort_proc abort;
 } drmmode_flipdata_rec, *drmmode_flipdata_ptr;
 
+struct drmmode_fb {
+	int refcnt;
+	uint32_t handle;
+};
+
 struct drmmode_scanout {
 	struct amdgpu_buffer *bo;
 	PixmapPtr pixmap;
-	unsigned fb_id;
 	int width, height;
 };
 
@@ -96,8 +98,10 @@ typedef struct {
 
 	/* Modeset needed for DPMS on */
 	Bool need_modeset;
-	/* A flip is pending for this CRTC */
-	Bool flip_pending;
+	/* A flip to this FB is pending for this CRTC */
+	struct drmmode_fb *flip_pending;
+	/* The FB currently being scanned out by this CRTC, if any */
+	struct drmmode_fb *fb;
 } drmmode_crtc_private_rec, *drmmode_crtc_private_ptr;
 
 typedef struct {
@@ -126,6 +130,34 @@ enum drmmode_flip_sync {
     FLIP_VSYNC,
     FLIP_ASYNC,
 };
+
+
+static inline void
+drmmode_fb_reference(int drm_fd, struct drmmode_fb **old, struct drmmode_fb *new)
+{
+	if (new) {
+		if (new->refcnt <= 0) {
+			ErrorF("New FB's refcnt was %d in %s\n", new->refcnt,
+			       __func__);
+		} else {
+			new->refcnt++;
+		}
+	}
+
+	if (*old) {
+		if ((*old)->refcnt <= 0) {
+			ErrorF("Old FB's refcnt was %d in %s\n",
+			       (*old)->refcnt, __func__);
+		} else {
+			if (--(*old)->refcnt == 0) {
+				drmModeRmFB(drm_fd, (*old)->handle);
+				free(*old);
+			}
+		}
+	}
+
+	*old = new;
+}
 
 
 extern int drmmode_page_flip_target_absolute(AMDGPUEntPtr pAMDGPUEnt,

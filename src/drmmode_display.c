@@ -322,6 +322,7 @@ drmmode_crtc_dpms(xf86CrtcPtr crtc, int mode)
 
 		drmModeSetCrtc(pAMDGPUEnt->fd, drmmode_crtc->mode_crtc->crtc_id,
 			       0, 0, 0, NULL, 0, NULL);
+		drmmode_fb_reference(pAMDGPUEnt->fd, &drmmode_crtc->fb, NULL);
 	} else if (drmmode_crtc->dpms_mode != DPMSModeOn)
 		crtc->funcs->set_mode_major(crtc, &crtc->mode, crtc->rotation,
 					    crtc->x, crtc->y);
@@ -390,8 +391,9 @@ void drmmode_copy_fb(ScrnInfoPtr pScrn, drmmode_ptr drmmode)
 {
 	xf86CrtcConfigPtr   xf86_config = XF86_CRTC_CONFIG_PTR(pScrn);
 	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
-	PixmapPtr src, dst;
 	ScreenPtr pScreen = pScrn->pScreen;
+	PixmapPtr src, dst = pScreen->GetScreenPixmap(pScreen);
+	struct drmmode_fb *fb = amdgpu_pixmap_get_fb(dst);
 	int fbcon_id = 0;
 	GCPtr gc;
 	int i;
@@ -406,7 +408,7 @@ void drmmode_copy_fb(ScrnInfoPtr pScrn, drmmode_ptr drmmode)
 	if (!fbcon_id)
 		return;
 
-	if (fbcon_id == drmmode->fb_id) {
+	if (fbcon_id == fb->handle) {
 		/* in some rare case there might be no fbcon and we might already
 		 * be the one with the current fb to avoid a false deadlck in
 		 * kernel ttm code just do nothing as anyway there is nothing
@@ -418,8 +420,6 @@ void drmmode_copy_fb(ScrnInfoPtr pScrn, drmmode_ptr drmmode)
 	src = create_pixmap_for_fbcon(drmmode, pScrn, fbcon_id);
 	if (!src)
 		return;
-
-	dst = pScreen->GetScreenPixmap(pScreen);
 
 	gc = GetScratchGC(pScrn->depth, pScreen);
 	ValidateGC(&dst->drawable, gc);
@@ -449,10 +449,6 @@ drmmode_crtc_scanout_destroy(drmmode_ptr drmmode,
 	}
 
 	if (scanout->bo) {
-		AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(drmmode->scrn);
-
-		drmModeRmFB(pAMDGPUEnt->fd, scanout->fb_id);
-		scanout->fb_id = 0;
 		amdgpu_bo_unref(&scanout->bo);
 		scanout->bo = NULL;
 	}
@@ -497,10 +493,8 @@ drmmode_crtc_scanout_create(xf86CrtcPtr crtc, struct drmmode_scanout *scanout,
 			    int width, int height)
 {
 	ScrnInfoPtr pScrn = crtc->scrn;
-	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(pScrn);
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
 	drmmode_ptr drmmode = drmmode_crtc->drmmode;
-	union gbm_bo_handle bo_handle;
 	int pitch;
 
 	if (scanout->pixmap) {
@@ -516,15 +510,7 @@ drmmode_crtc_scanout_create(xf86CrtcPtr crtc, struct drmmode_scanout *scanout,
 	if (!scanout->bo) {
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
 			   "Failed to allocate scanout buffer memory\n");
-		goto error;
-	}
-
-	bo_handle = gbm_bo_get_handle(scanout->bo->bo.gbm);
-	if (drmModeAddFB(pAMDGPUEnt->fd, width, height, pScrn->depth,
-			 pScrn->bitsPerPixel, pitch,
-			 bo_handle.u32, &scanout->fb_id) != 0) {
-		ErrorF("failed to add scanout fb\n");
-		goto error;
+		return NULL;
 	}
 
 	scanout->pixmap = drmmode_create_bo_pixmap(pScrn,
@@ -532,13 +518,17 @@ drmmode_crtc_scanout_create(xf86CrtcPtr crtc, struct drmmode_scanout *scanout,
 						 pScrn->depth,
 						 pScrn->bitsPerPixel,
 						 pitch, scanout->bo);
-	if (scanout->pixmap) {
+	if (!scanout->pixmap) {
+		ErrorF("failed to create CRTC scanout pixmap\n");
+		goto error;
+	}
+
+	if (amdgpu_pixmap_get_fb(scanout->pixmap)) {
 		scanout->width = width;
 		scanout->height = height;
 	} else {
-		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-			   "Couldn't allocate scanout pixmap for CRTC\n");
-error:
+		ErrorF("failed to create CRTC scanout FB\n");
+error:		
 		drmmode_crtc_scanout_destroy(drmmode, scanout);
 	}
 
@@ -651,8 +641,8 @@ drmmode_handle_transform(xf86CrtcPtr crtc)
 
 static void
 drmmode_crtc_prime_scanout_update(xf86CrtcPtr crtc, DisplayModePtr mode,
-				  unsigned scanout_id, int *fb_id, int *x,
-				  int *y)
+				  unsigned scanout_id, struct drmmode_fb **fb,
+				  int *x, int *y)
 {
 	ScrnInfoPtr scrn = crtc->scrn;
 	ScreenPtr screen = scrn->pScreen;
@@ -701,7 +691,7 @@ drmmode_crtc_prime_scanout_update(xf86CrtcPtr crtc, DisplayModePtr mode,
 		}
 	}
 
-	*fb_id = drmmode_crtc->scanout[scanout_id].fb_id;
+	*fb = amdgpu_pixmap_get_fb(drmmode_crtc->scanout[scanout_id].pixmap);
 	*x = *y = 0;
 	drmmode_crtc->scanout_id = scanout_id;
 }
@@ -710,7 +700,8 @@ drmmode_crtc_prime_scanout_update(xf86CrtcPtr crtc, DisplayModePtr mode,
 
 static void
 drmmode_crtc_scanout_update(xf86CrtcPtr crtc, DisplayModePtr mode,
-			    unsigned scanout_id, int *fb_id, int *x, int *y)
+			    unsigned scanout_id, struct drmmode_fb **fb, int *x,
+			    int *y)
 {
 	ScrnInfoPtr scrn = crtc->scrn;
 	ScreenPtr screen = scrn->pScreen;
@@ -746,7 +737,7 @@ drmmode_crtc_scanout_update(xf86CrtcPtr crtc, DisplayModePtr mode,
 		box->x2 = max(box->x2, scrn->virtualX);
 		box->y2 = max(box->y2, scrn->virtualY);
 
-		*fb_id = drmmode_crtc->scanout[scanout_id].fb_id;
+		*fb = amdgpu_pixmap_get_fb(drmmode_crtc->scanout[scanout_id].pixmap);
 		*x = *y = 0;
 
 		amdgpu_scanout_do_update(crtc, scanout_id);
@@ -784,9 +775,8 @@ drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 	int output_count = 0;
 	Bool ret = FALSE;
 	int i;
-	int fb_id;
+	struct drmmode_fb *fb = NULL;
 	drmModeModeInfo kmode;
-	uint32_t bo_handle;
 
 	/* The root window contents may be undefined before the WindowExposures
 	 * hook is called for it, so bail if we get here before that
@@ -834,15 +824,14 @@ drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 
 		drmmode_ConvertToKMode(crtc->scrn, &kmode, mode);
 
-		fb_id = drmmode->fb_id;
 #ifdef AMDGPU_PIXMAP_SHARING
 		if (drmmode_crtc->prime_scanout_pixmap) {
 			drmmode_crtc_prime_scanout_update(crtc, mode, scanout_id,
-							  &fb_id, &x, &y);
+							  &fb, &x, &y);
 		} else
 #endif
-		if (drmmode_crtc->rotate.fb_id) {
-			fb_id = drmmode_crtc->rotate.fb_id;
+		if (drmmode_crtc->rotate.pixmap) {
+			fb = amdgpu_pixmap_get_fb(drmmode_crtc->rotate.pixmap);
 			x = y = 0;
 
 		} else if (!amdgpu_is_gpu_screen(pScreen) &&
@@ -852,26 +841,27 @@ drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 #endif
 			    info->shadow_primary)) {
 			drmmode_crtc_scanout_update(crtc, mode, scanout_id,
-						    &fb_id, &x, &y);
+						    &fb, &x, &y);
 		}
 
-		if (fb_id == 0) {
-			if (!amdgpu_bo_get_handle(info->front_buffer, &bo_handle)) {
-				ErrorF("failed to get BO handle for FB\n");
-				goto done;
-			}
+		if (!fb)
+			fb = amdgpu_pixmap_get_fb(pScreen->GetWindowPixmap(pScreen->root));
+		if (!fb) {
+			union gbm_bo_handle bo_handle;
 
-			if (drmModeAddFB(pAMDGPUEnt->fd,
-				   pScrn->virtualX,
-				   pScrn->virtualY,
-				   pScrn->depth, pScrn->bitsPerPixel,
-				   pScrn->displayWidth * info->pixel_bytes,
-				   bo_handle, &drmmode->fb_id) < 0) {
-				ErrorF("failed to add fb\n");
-				goto done;
-			}
-
-			fb_id = drmmode->fb_id;
+			bo_handle = gbm_bo_get_handle(info->front_buffer->bo.gbm);
+			fb = amdgpu_fb_create(pAMDGPUEnt->fd, pScrn->virtualX,
+					      pScrn->virtualY, pScrn->depth,
+					      pScrn->bitsPerPixel,
+					      pScrn->displayWidth * info->pixel_bytes,
+					      bo_handle.u32);
+			/* Prevent refcnt of ad-hoc FBs from reaching 2 */
+			drmmode_fb_reference(pAMDGPUEnt->fd, &drmmode_crtc->fb, NULL);
+			drmmode_crtc->fb = fb;
+		}
+		if (!fb) {
+			ErrorF("failed to add FB for modeset\n");
+			goto done;
 		}
 
 		/* Wait for any pending flip to finish */
@@ -881,13 +871,15 @@ drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 
 		if (drmModeSetCrtc(pAMDGPUEnt->fd,
 				   drmmode_crtc->mode_crtc->crtc_id,
-				   fb_id, x, y, output_ids,
+				   fb->handle, x, y, output_ids,
 				   output_count, &kmode) != 0) {
 			xf86DrvMsg(crtc->scrn->scrnIndex, X_ERROR,
 				   "failed to set mode: %s\n", strerror(errno));
 			goto done;
-		} else
+		} else {
 			ret = TRUE;
+			drmmode_fb_reference(pAMDGPUEnt->fd, &drmmode_crtc->fb, fb);
+		}
 
 		if (pScreen)
 			xf86CrtcSetScreenSubpixelOrder(pScreen);
@@ -933,7 +925,9 @@ done:
 	} else {
 		crtc->active = TRUE;
 
-		if (fb_id != drmmode_crtc->scanout[scanout_id].fb_id)
+		if (drmmode_crtc->scanout[scanout_id].pixmap &&
+		    fb != amdgpu_pixmap_get_fb(drmmode_crtc->
+					       scanout[scanout_id].pixmap))
 			drmmode_crtc_scanout_free(drmmode_crtc);
 		else if (!drmmode_crtc->tear_free) {
 			drmmode_crtc_scanout_destroy(drmmode,
@@ -2079,14 +2073,9 @@ int drmmode_get_pitch_align(ScrnInfoPtr scrn, int bpe)
 static Bool drmmode_xf86crtc_resize(ScrnInfoPtr scrn, int width, int height)
 {
 	xf86CrtcConfigPtr xf86_config = XF86_CRTC_CONFIG_PTR(scrn);
-	drmmode_crtc_private_ptr
-	    drmmode_crtc = xf86_config->crtc[0]->driver_private;
-	drmmode_ptr drmmode = drmmode_crtc->drmmode;
 	AMDGPUInfoPtr info = AMDGPUPTR(scrn);
-	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(scrn);
 	struct amdgpu_buffer *old_front = NULL;
 	ScreenPtr screen = xf86ScrnToScreen(scrn);
-	uint32_t old_fb_id;
 	int i, pitch, old_width, old_height, old_pitch;
 	int cpp = info->pixel_bytes;
 	PixmapPtr ppix = screen->GetScreenPixmap(screen);
@@ -2109,8 +2098,6 @@ static Bool drmmode_xf86crtc_resize(ScrnInfoPtr scrn, int width, int height)
 	old_width = scrn->virtualX;
 	old_height = scrn->virtualY;
 	old_pitch = scrn->displayWidth;
-	old_fb_id = drmmode->fb_id;
-	drmmode->fb_id = 0;
 	old_front = info->front_buffer;
 
 	scrn->virtualX = width;
@@ -2182,8 +2169,6 @@ static Bool drmmode_xf86crtc_resize(ScrnInfoPtr scrn, int width, int height)
 				       crtc->rotation, crtc->x, crtc->y);
 	}
 
-	if (old_fb_id)
-		drmModeRmFB(pAMDGPUEnt->fd, old_fb_id);
 	if (old_front) {
 		amdgpu_bo_unref(&old_front);
 	}
@@ -2198,7 +2183,6 @@ fail:
 	scrn->virtualX = old_width;
 	scrn->virtualY = old_height;
 	scrn->displayWidth = old_pitch;
-	drmmode->fb_id = old_fb_id;
 
 	return FALSE;
 }
@@ -2212,7 +2196,7 @@ drmmode_clear_pending_flip(xf86CrtcPtr crtc)
 {
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
 
-	drmmode_crtc->flip_pending = FALSE;
+	drmmode_crtc->flip_pending = NULL;
 
 	if (!crtc->enabled ||
 	    (drmmode_crtc->pending_dpms_mode != DPMSModeOn &&
@@ -2257,6 +2241,7 @@ static void
 drmmode_flip_handler(xf86CrtcPtr crtc, uint32_t frame, uint64_t usec, void *event_data)
 {
 	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(crtc->scrn);
+	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
 	drmmode_flipdata_ptr flipdata = event_data;
 
 	/* Is this the event whose info shall be delivered to higher level? */
@@ -2276,12 +2261,11 @@ drmmode_flip_handler(xf86CrtcPtr crtc, uint32_t frame, uint64_t usec, void *even
 		else
 			flipdata->handler(crtc, frame, usec, flipdata->event_data);
 
-		/* Release framebuffer */
-		drmModeRmFB(pAMDGPUEnt->fd, flipdata->old_fb_id);
-
 		free(flipdata);
 	}
 
+	drmmode_fb_reference(pAMDGPUEnt->fd, &drmmode_crtc->fb,
+			     drmmode_crtc->flip_pending);
 	drmmode_clear_pending_flip(crtc);
 }
 
@@ -2514,6 +2498,8 @@ Bool drmmode_set_desired_modes(ScrnInfoPtr pScrn, drmmode_ptr drmmode,
 				drmModeSetCrtc(pAMDGPUEnt->fd,
 					       drmmode_crtc->mode_crtc->crtc_id,
 					       0, 0, 0, NULL, 0, NULL);
+				drmmode_fb_reference(pAMDGPUEnt->fd,
+						     &drmmode_crtc->fb, NULL);
 			}
 			continue;
 		}
@@ -2773,18 +2759,11 @@ Bool amdgpu_do_pageflip(ScrnInfoPtr scrn, ClientPtr client,
 	xf86CrtcConfigPtr config = XF86_CRTC_CONFIG_PTR(scrn);
 	xf86CrtcPtr crtc = NULL;
 	drmmode_crtc_private_ptr drmmode_crtc = config->crtc[0]->driver_private;
-	drmmode_ptr drmmode = drmmode_crtc->drmmode;
 	int i;
 	uint32_t flip_flags = flip_sync == FLIP_ASYNC ? DRM_MODE_PAGE_FLIP_ASYNC : 0;
 	drmmode_flipdata_ptr flipdata;
 	uintptr_t drm_queue_seq = 0;
-	uint32_t new_front_handle;
-
-	if (!amdgpu_pixmap_get_handle(new_front, &new_front_handle)) {
-		xf86DrvMsg(scrn->scrnIndex, X_WARNING,
-			   "flip queue: data alloc failed.\n");
-		return FALSE;
-	}
+	struct drmmode_fb *fb;
 
 	flipdata = calloc(1, sizeof(drmmode_flipdata_rec));
 	if (!flipdata) {
@@ -2793,15 +2772,11 @@ Bool amdgpu_do_pageflip(ScrnInfoPtr scrn, ClientPtr client,
 		goto error;
 	}
 
-	/*
-	 * Create a new handle for the back buffer
-	 */
-	flipdata->old_fb_id = drmmode->fb_id;
-	if (drmModeAddFB(pAMDGPUEnt->fd, new_front->drawable.width,
-			 new_front->drawable.height, scrn->depth,
-			 scrn->bitsPerPixel, new_front->devKind,
-			 new_front_handle, &drmmode->fb_id))
+	fb = amdgpu_pixmap_get_fb(new_front);
+	if (!fb) {
+		ErrorF("Failed to get FB for flip\n");
 		goto error;
+	}
 
 	/*
 	 * Queue flips on all enabled CRTCs
@@ -2845,7 +2820,7 @@ Bool amdgpu_do_pageflip(ScrnInfoPtr scrn, ClientPtr client,
 		if (drmmode_crtc->hw_id == ref_crtc_hw_id) {
 			if (drmmode_page_flip_target_absolute(pAMDGPUEnt,
 							      drmmode_crtc,
-							      drmmode->fb_id,
+							      fb->handle,
 							      flip_flags,
 							      drm_queue_seq,
 							      target_msc) != 0)
@@ -2853,13 +2828,13 @@ Bool amdgpu_do_pageflip(ScrnInfoPtr scrn, ClientPtr client,
 		} else {
 			if (drmmode_page_flip_target_relative(pAMDGPUEnt,
 							      drmmode_crtc,
-							      drmmode->fb_id,
+							      fb->handle,
 							      flip_flags,
 							      drm_queue_seq, 0) != 0)
 				goto flip_error;
 		}
 
-		drmmode_crtc->flip_pending = TRUE;
+		drmmode_crtc->flip_pending = fb;
 		drm_queue_seq = 0;
 	}
 
@@ -2871,12 +2846,6 @@ flip_error:
 		   strerror(errno));
 
 error:
-	if (flipdata && flipdata->flip_count <= 1 &&
-	    drmmode->fb_id != flipdata->old_fb_id) {
-		drmModeRmFB(pAMDGPUEnt->fd, drmmode->fb_id);
-		drmmode->fb_id = flipdata->old_fb_id;
-	}
-
 	if (drm_queue_seq)
 		amdgpu_drm_abort_entry(drm_queue_seq);
 	else if (crtc)

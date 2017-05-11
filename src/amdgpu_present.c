@@ -350,7 +350,6 @@ static void
 amdgpu_present_unflip(ScreenPtr screen, uint64_t event_id)
 {
 	ScrnInfoPtr scrn = xf86ScreenToScrn(screen);
-	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(scrn);
 	AMDGPUInfoPtr info = AMDGPUPTR(scrn);
 	xf86CrtcConfigPtr config = XF86_CRTC_CONFIG_PTR(scrn);
 	struct amdgpu_present_vblank_event *event;
@@ -358,7 +357,6 @@ amdgpu_present_unflip(ScreenPtr screen, uint64_t event_id)
 	enum drmmode_flip_sync flip_sync =
 		(amdgpu_present_screen_info.capabilities & PresentCapabilityAsync) ?
 		FLIP_ASYNC : FLIP_VSYNC;
-	int old_fb_id;
 	int i;
 
 	if (!amdgpu_present_check_unflip(scrn))
@@ -380,12 +378,6 @@ amdgpu_present_unflip(ScreenPtr screen, uint64_t event_id)
 		return;
 
 modeset:
-	/* info->drmmode.fb_id still points to the FB for the last flipped BO.
-	 * Clear it, drmmode_set_mode_major will re-create it
-	 */
-	old_fb_id = info->drmmode.fb_id;
-	info->drmmode.fb_id = 0;
-
 	amdgpu_glamor_finish(scrn);
 	for (i = 0; i < config->num_crtc; i++) {
 		xf86CrtcPtr crtc = config->crtc[i];
@@ -401,7 +393,6 @@ modeset:
 			drmmode_crtc->need_modeset = TRUE;
 	}
 
-	drmModeRmFB(pAMDGPUEnt->fd, old_fb_id);
 	present_event_notify(event_id, 0, 0);
 	info->drmmode.present_flipping = FALSE;
 }
