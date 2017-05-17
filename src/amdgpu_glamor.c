@@ -66,10 +66,9 @@ Bool amdgpu_glamor_create_screen_resources(ScreenPtr screen)
 #endif
 
 	if (!amdgpu_bo_get_handle(info->front_buffer, &bo_handle) ||
-	    !glamor_egl_create_textured_screen_ext(screen,
-						   bo_handle,
-						   scrn->displayWidth *
-						   info->pixel_bytes, NULL)) {
+	    !glamor_egl_create_textured_screen(screen, bo_handle,
+					       scrn->displayWidth *
+					       info->pixel_bytes)) {
 		return FALSE;
 	}
 
