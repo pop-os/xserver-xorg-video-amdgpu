@@ -1191,19 +1191,22 @@ static Bool AMDGPUPreInitAccel_KMS(ScrnInfoPtr pScrn)
 
 		if (info->dri2.available)
 			info->gbm = gbm_create_device(pAMDGPUEnt->fd);
-		if (info->gbm == NULL)
-			info->dri2.available = FALSE;
 
-		if (use_glamor &&
-			amdgpu_glamor_pre_init(pScrn))
-			return TRUE;
-
-		if (info->dri2.available)
-			return TRUE;
+		if (info->gbm) {
+			if (!use_glamor ||
+			    amdgpu_glamor_pre_init(pScrn))
+				return TRUE;
+		} else {
+			xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
+				   "gbm_create_device returned NULL, using "
+				   "ShadowFB\n");
+		}
+	} else {
+		xf86DrvMsg(pScrn->scrnIndex, X_CONFIG,
+			   "GPU acceleration disabled, using ShadowFB\n");
 	}
 
-	xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-		   "GPU accel disabled or not working, using shadowfb for KMS\n");
+	info->dri2.available = FALSE;
 	info->shadow_fb = TRUE;
 	if (!xf86LoadSubModule(pScrn, "shadow"))
 		info->shadow_fb = FALSE;

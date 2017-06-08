@@ -81,9 +81,6 @@ Bool amdgpu_glamor_pre_init(ScrnInfoPtr scrn)
 	pointer glamor_module;
 	CARD32 version;
 
-	if (!info->dri2.available)
-		return FALSE;
-
 	if (scrn->depth < 24) {
 		xf86DrvMsg(scrn->scrnIndex, X_ERROR,
 			   "glamor requires depth >= 24, disabling.\n");
