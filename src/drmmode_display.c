@@ -2196,8 +2196,11 @@ void
 drmmode_clear_pending_flip(xf86CrtcPtr crtc)
 {
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
+	ScrnInfoPtr scrn = crtc->scrn;
+	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(scrn);
 
-	drmmode_crtc->flip_pending = NULL;
+	drmmode_fb_reference(pAMDGPUEnt->fd, &drmmode_crtc->flip_pending,
+			     NULL);
 
 	if (!crtc->enabled ||
 	    (drmmode_crtc->pending_dpms_mode != DPMSModeOn &&
@@ -2835,7 +2838,8 @@ Bool amdgpu_do_pageflip(ScrnInfoPtr scrn, ClientPtr client,
 				goto flip_error;
 		}
 
-		drmmode_crtc->flip_pending = fb;
+		drmmode_fb_reference(pAMDGPUEnt->fd, &drmmode_crtc->flip_pending,
+				     fb);
 		drm_queue_seq = 0;
 	}
 
