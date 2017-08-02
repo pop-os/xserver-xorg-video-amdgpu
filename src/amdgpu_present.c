@@ -228,14 +228,7 @@ amdgpu_present_check_unflip(ScrnInfoPtr scrn)
 		return FALSE;
 
 	for (i = 0, num_crtcs_on = 0; i < config->num_crtc; i++) {
-		xf86CrtcPtr crtc = config->crtc[i];
-		drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
-
-		if (!drmmode_crtc || drmmode_crtc->rotate.bo ||
-		    drmmode_crtc->scanout[drmmode_crtc->scanout_id].bo)
-			return FALSE;
-
-		if (drmmode_crtc_can_flip(crtc))
+		if (drmmode_crtc_can_flip(config->crtc[i]))
 			num_crtcs_on++;
 	}
 
@@ -267,6 +260,9 @@ amdgpu_present_check_flip(RRCrtcPtr crtc, WindowPtr window, PixmapPtr pixmap,
 	 */
 	if (amdgpu_pixmap_get_tiling_info(pixmap) !=
 	    amdgpu_pixmap_get_tiling_info(screen->GetScreenPixmap(screen)))
+		return FALSE;
+
+	if (!drmmode_crtc_can_flip(crtc->devPrivate))
 		return FALSE;
 
 	return amdgpu_present_check_unflip(scrn);
