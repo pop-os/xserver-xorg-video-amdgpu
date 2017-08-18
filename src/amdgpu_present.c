@@ -308,8 +308,6 @@ amdgpu_present_flip(RRCrtcPtr crtc, uint64_t event_id, uint64_t target_msc,
 	ScrnInfoPtr scrn = xf86ScreenToScrn(screen);
 	AMDGPUInfoPtr info = AMDGPUPTR(scrn);
 	struct amdgpu_present_vblank_event *event;
-	xf86CrtcPtr xf86_crtc = crtc->devPrivate;
-	int crtc_id = xf86_crtc ? drmmode_get_crtc_id(xf86_crtc) : -1;
 	Bool ret;
 
 	if (!amdgpu_present_check_flip(crtc, screen->root, pixmap, sync_flip))
@@ -324,7 +322,7 @@ amdgpu_present_flip(RRCrtcPtr crtc, uint64_t event_id, uint64_t target_msc,
 	amdgpu_glamor_flush(scrn);
 
 	ret = amdgpu_do_pageflip(scrn, AMDGPU_DRM_QUEUE_CLIENT_DEFAULT,
-				 pixmap, event_id, event, crtc_id,
+				 pixmap, event_id, event, crtc->devPrivate,
 				 amdgpu_present_flip_event,
 				 amdgpu_present_flip_abort,
 				 sync_flip ? FLIP_VSYNC : FLIP_ASYNC,
@@ -367,7 +365,7 @@ amdgpu_present_unflip(ScreenPtr screen, uint64_t event_id)
 
 	amdgpu_glamor_flush(scrn);
 	if (amdgpu_do_pageflip(scrn, AMDGPU_DRM_QUEUE_CLIENT_DEFAULT, pixmap,
-			       event_id, event, -1, amdgpu_present_flip_event,
+			       event_id, event, NULL, amdgpu_present_flip_event,
 			       amdgpu_present_flip_abort, flip_sync, 0))
 		return;
 

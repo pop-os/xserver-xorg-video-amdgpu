@@ -541,7 +541,6 @@ amdgpu_dri2_schedule_flip(xf86CrtcPtr crtc, ClientPtr client,
 	AMDGPUInfoPtr info = AMDGPUPTR(scrn);
 	struct dri2_buffer_priv *back_priv;
 	DRI2FrameEventPtr flip_info;
-	int ref_crtc_hw_id = drmmode_get_crtc_id(crtc);
 
 	flip_info = calloc(1, sizeof(DRI2FrameEventRec));
 	if (!flip_info)
@@ -561,8 +560,7 @@ amdgpu_dri2_schedule_flip(xf86CrtcPtr crtc, ClientPtr client,
 	/* Page flip the full screen buffer */
 	back_priv = back->driverPrivate;
 	if (amdgpu_do_pageflip(scrn, client, back_priv->pixmap,
-			       AMDGPU_DRM_QUEUE_ID_DEFAULT, flip_info,
-			       ref_crtc_hw_id,
+			       AMDGPU_DRM_QUEUE_ID_DEFAULT, flip_info, crtc,
 			       amdgpu_dri2_flip_event_handler,
 			       amdgpu_dri2_flip_event_abort, FLIP_VSYNC,
 			       target_msc - amdgpu_get_msc_delta(draw, crtc))) {
