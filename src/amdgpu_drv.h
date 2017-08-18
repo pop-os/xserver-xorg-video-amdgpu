@@ -363,6 +363,4 @@ extern xf86CrtcPtr amdgpu_pick_best_crtc(ScrnInfoPtr pScrn,
 
 extern AMDGPUEntPtr AMDGPUEntPriv(ScrnInfoPtr pScrn);
 
-drmVBlankSeqType amdgpu_populate_vbl_request_type(xf86CrtcPtr crtc);
-
 #endif /* _AMDGPU_DRV_H_ */
