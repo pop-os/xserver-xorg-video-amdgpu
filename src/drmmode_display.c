@@ -771,7 +771,8 @@ drmmode_crtc_scanout_update(xf86CrtcPtr crtc, DisplayModePtr mode,
 		*x = *y = 0;
 
 		amdgpu_scanout_do_update(crtc, scanout_id,
-					 &screen->GetWindowPixmap(screen->root)->drawable);
+					 &screen->GetWindowPixmap(screen->root)->drawable,
+					 box);
 		amdgpu_glamor_finish(scrn);
 	}
 }
