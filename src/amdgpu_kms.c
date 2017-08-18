@@ -792,7 +792,8 @@ amdgpu_dirty_update(ScrnInfoPtr scrn)
 #endif
 
 Bool
-amdgpu_scanout_do_update(xf86CrtcPtr xf86_crtc, int scanout_id)
+amdgpu_scanout_do_update(xf86CrtcPtr xf86_crtc, int scanout_id,
+			  DrawablePtr src_draw)
 {
 	drmmode_crtc_private_ptr drmmode_crtc = xf86_crtc->driver_private;
 	RegionPtr pRegion = DamageRegion(drmmode_crtc->scanout_damage);
@@ -827,10 +828,7 @@ amdgpu_scanout_do_update(xf86CrtcPtr xf86_crtc, int scanout_id)
 		PicturePtr src, dst;
 		XID include_inferiors = IncludeInferiors;
 
-		src = CreatePicture(None,
-				    &pScreen->root->drawable,
-				    format,
-				    CPSubwindowMode,
+		src = CreatePicture(None, src_draw, format, CPSubwindowMode,
 				    &include_inferiors, serverClient, &error);
 		if (!src) {
 			ErrorF("Failed to create source picture for transformed scanout "
@@ -874,8 +872,7 @@ amdgpu_scanout_do_update(xf86CrtcPtr xf86_crtc, int scanout_id)
 		GCPtr gc = GetScratchGC(pDraw->depth, pScreen);
 
 		ValidateGC(pDraw, gc);
-		(*gc->ops->CopyArea)(&pScreen->GetWindowPixmap(pScreen->root)->drawable,
-				     pDraw, gc,
+		(*gc->ops->CopyArea)(src_draw, pDraw, gc,
 				     xf86_crtc->x + extents.x1, xf86_crtc->y + extents.y1,
 				     extents.x2 - extents.x1, extents.y2 - extents.y1,
 				     extents.x1, extents.y1);
@@ -900,8 +897,10 @@ amdgpu_scanout_update_handler(xf86CrtcPtr crtc, uint32_t frame, uint64_t usec,
 							  void *event_data)
 {
 	drmmode_crtc_private_ptr drmmode_crtc = event_data;
+	ScreenPtr screen = crtc->scrn->pScreen;
 
-	amdgpu_scanout_do_update(crtc, drmmode_crtc->scanout_id);
+	amdgpu_scanout_do_update(crtc, drmmode_crtc->scanout_id,
+				 &screen->GetWindowPixmap(screen->root)->drawable);
 
 	amdgpu_scanout_update_abort(crtc, event_data);
 }
@@ -988,7 +987,8 @@ amdgpu_scanout_flip(ScreenPtr pScreen, AMDGPUInfoPtr info,
 		return;
 
 	scanout_id = drmmode_crtc->scanout_id ^ 1;
-	if (!amdgpu_scanout_do_update(xf86_crtc, scanout_id))
+	if (!amdgpu_scanout_do_update(xf86_crtc, scanout_id,
+				      &pScreen->GetWindowPixmap(pScreen->root)->drawable))
 		return;
 
 	drm_queue_seq = amdgpu_drm_queue_alloc(xf86_crtc,
