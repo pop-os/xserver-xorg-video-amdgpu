@@ -96,6 +96,14 @@ AMDGPUZaphodStringMatches(ScrnInfoPtr pScrn, const char *s, char *output_name)
 	return FALSE;
 }
 
+
+/* Wait for the boolean condition to be FALSE */
+#define drmmode_crtc_wait_pending_event(drmmode_crtc, fd, condition) \
+	do {} while ((condition) && \
+		     drmHandleEvent(fd, &drmmode_crtc->drmmode->event_context) \
+		     > 0);
+
+
 static PixmapPtr drmmode_create_bo_pixmap(ScrnInfoPtr pScrn,
 					  int width, int height,
 					  int depth, int bpp,
@@ -891,10 +899,8 @@ drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 			goto done;
 		}
 
-		/* Wait for any pending flip to finish */
-		do {} while (drmmode_crtc->flip_pending &&
-			     drmHandleEvent(pAMDGPUEnt->fd,
-					    &drmmode->event_context) > 0);
+		drmmode_crtc_wait_pending_event(drmmode_crtc, pAMDGPUEnt->fd,
+						drmmode_crtc->flip_pending);
 
 		if (drmModeSetCrtc(pAMDGPUEnt->fd,
 				   drmmode_crtc->mode_crtc->crtc_id,
