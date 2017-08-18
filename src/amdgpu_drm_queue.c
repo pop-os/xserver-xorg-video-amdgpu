@@ -105,7 +105,7 @@ amdgpu_drm_queue_alloc(xf86CrtcPtr crtc, ClientPtr client,
 	e->handler = handler;
 	e->abort = abort;
 
-	xorg_list_add(&e->list, &amdgpu_drm_queue);
+	xorg_list_append(&e->list, &amdgpu_drm_queue);
 
 	return e->seq;
 }
