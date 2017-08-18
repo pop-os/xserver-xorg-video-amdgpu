@@ -420,6 +420,38 @@ amdgpu_sync_scanout_pixmaps(xf86CrtcPtr xf86_crtc, RegionPtr new_region,
 	RegionUninit(&remaining);
 }
 
+static void
+amdgpu_scanout_flip_abort(xf86CrtcPtr crtc, void *event_data)
+{
+	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(crtc->scrn);
+	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
+
+	drmmode_crtc->scanout_update_pending = FALSE;
+	drmmode_fb_reference(pAMDGPUEnt->fd, &drmmode_crtc->flip_pending,
+			     NULL);
+}
+
+static void
+amdgpu_scanout_flip_handler(xf86CrtcPtr crtc, uint32_t msc, uint64_t usec,
+			    void *event_data)
+{
+	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(crtc->scrn);
+	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
+
+	drmmode_fb_reference(pAMDGPUEnt->fd, &drmmode_crtc->fb,
+			     drmmode_crtc->flip_pending);
+	amdgpu_scanout_flip_abort(crtc, event_data);
+
+#ifdef HAVE_PRESENT_H
+	if (drmmode_crtc->present_vblank_event_id) {
+		present_event_notify(drmmode_crtc->present_vblank_event_id,
+				     drmmode_crtc->present_vblank_usec,
+				     drmmode_crtc->present_vblank_msc);
+		drmmode_crtc->present_vblank_event_id = 0;
+	}
+#endif
+}
+
 #ifdef AMDGPU_PIXMAP_SHARING
 
 static RegionPtr
@@ -665,38 +697,6 @@ amdgpu_prime_scanout_update(PixmapDirtyUpdatePtr dirty)
 }
 
 static void
-amdgpu_prime_scanout_flip_abort(xf86CrtcPtr crtc, void *event_data)
-{
-	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(crtc->scrn);
-	drmmode_crtc_private_ptr drmmode_crtc = event_data;
-
-	drmmode_crtc->scanout_update_pending = FALSE;
-	drmmode_fb_reference(pAMDGPUEnt->fd, &drmmode_crtc->flip_pending,
-			     NULL);
-}
-
-static void
-amdgpu_prime_scanout_flip_handler(xf86CrtcPtr crtc, uint32_t msc, uint64_t usec,
-				  void *event_data)
-{
-	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(crtc->scrn);
-	drmmode_crtc_private_ptr drmmode_crtc = event_data;
-
-	drmmode_fb_reference(pAMDGPUEnt->fd, &drmmode_crtc->fb,
-			     drmmode_crtc->flip_pending);
-	amdgpu_prime_scanout_flip_abort(crtc, event_data);
-
-#ifdef HAVE_PRESENT_H
-	if (drmmode_crtc->present_vblank_event_id) {
-		present_event_notify(drmmode_crtc->present_vblank_event_id,
-				     drmmode_crtc->present_vblank_usec,
-				     drmmode_crtc->present_vblank_msc);
-		drmmode_crtc->present_vblank_event_id = 0;
-	}
-#endif
-}
-
-static void
 amdgpu_prime_scanout_flip(PixmapDirtyUpdatePtr ent)
 {
 	ScreenPtr screen = ent->slave_dst->drawable.pScreen;
@@ -723,9 +723,9 @@ amdgpu_prime_scanout_flip(PixmapDirtyUpdatePtr ent)
 	drm_queue_seq = amdgpu_drm_queue_alloc(crtc,
 					       AMDGPU_DRM_QUEUE_CLIENT_DEFAULT,
 					       AMDGPU_DRM_QUEUE_ID_DEFAULT,
-					       drmmode_crtc,
-					       amdgpu_prime_scanout_flip_handler,
-					       amdgpu_prime_scanout_flip_abort);
+					       NULL,
+					       amdgpu_scanout_flip_handler,
+					       amdgpu_scanout_flip_abort);
 	if (drm_queue_seq == AMDGPU_DRM_QUEUE_ERROR) {
 		xf86DrvMsg(scrn->scrnIndex, X_WARNING,
 			   "Allocating DRM event queue entry failed for PRIME flip.\n");
@@ -976,19 +976,6 @@ amdgpu_scanout_update(xf86CrtcPtr xf86_crtc)
 }
 
 static void
-amdgpu_scanout_flip_abort(xf86CrtcPtr crtc, void *event_data)
-{
-	amdgpu_prime_scanout_flip_abort(crtc, event_data);
-}
-
-static void
-amdgpu_scanout_flip_handler(xf86CrtcPtr crtc, uint32_t msc, uint64_t usec,
-			    void *event_data)
-{
-	amdgpu_prime_scanout_flip_handler(crtc, msc, usec, event_data);
-}
-
-static void
 amdgpu_scanout_flip(ScreenPtr pScreen, AMDGPUInfoPtr info,
 					xf86CrtcPtr xf86_crtc)
 {
@@ -1014,7 +1001,7 @@ amdgpu_scanout_flip(ScreenPtr pScreen, AMDGPUInfoPtr info,
 	drm_queue_seq = amdgpu_drm_queue_alloc(xf86_crtc,
 					       AMDGPU_DRM_QUEUE_CLIENT_DEFAULT,
 					       AMDGPU_DRM_QUEUE_ID_DEFAULT,
-					       drmmode_crtc,
+					       NULL,
 					       amdgpu_scanout_flip_handler,
 					       amdgpu_scanout_flip_abort);
 	if (drm_queue_seq == AMDGPU_DRM_QUEUE_ERROR) {
