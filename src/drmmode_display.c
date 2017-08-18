@@ -550,6 +550,14 @@ error:
 static void
 amdgpu_screen_damage_report(DamagePtr damage, RegionPtr region, void *closure)
 {
+	drmmode_crtc_private_ptr drmmode_crtc = closure;
+
+	if (drmmode_crtc->ignore_damage) {
+		RegionEmpty(&damage->damage);
+		drmmode_crtc->ignore_damage = FALSE;
+		return;
+	}
+
 	/* Only keep track of the extents */
 	RegionUninit(&damage->damage);
 	damage->damage.data = NULL;
@@ -2253,7 +2261,8 @@ drmmode_flip_handler(xf86CrtcPtr crtc, uint32_t frame, uint64_t usec, void *even
 
 	drmmode_fb_reference(pAMDGPUEnt->fd, &drmmode_crtc->fb,
 			     flipdata->fb);
-	if (drmmode_crtc->flip_pending == flipdata->fb) {
+	if (drmmode_crtc->tear_free ||
+	    drmmode_crtc->flip_pending == flipdata->fb) {
 		drmmode_fb_reference(pAMDGPUEnt->fd,
 				     &drmmode_crtc->flip_pending, NULL);
 	}
@@ -2798,13 +2807,16 @@ Bool amdgpu_do_pageflip(ScrnInfoPtr scrn, ClientPtr client,
 	flipdata->fe_crtc = ref_crtc;
 
 	for (i = 0; i < config->num_crtc; i++) {
-		crtc = config->crtc[i];
+		struct drmmode_fb *fb = flipdata->fb;
 
-		if (!drmmode_crtc_can_flip(crtc))
+		crtc = config->crtc[i];
+		drmmode_crtc = crtc->driver_private;
+
+		if (!drmmode_crtc_can_flip(crtc) ||
+		    (drmmode_crtc->tear_free && crtc != ref_crtc))
 			continue;
 
 		flipdata->flip_count++;
-		drmmode_crtc = crtc->driver_private;
 
 		drm_queue_seq = amdgpu_drm_queue_alloc(crtc, client, id,
 						       flipdata,
@@ -2816,10 +2828,39 @@ Bool amdgpu_do_pageflip(ScrnInfoPtr scrn, ClientPtr client,
 			goto error;
 		}
 
+		if (drmmode_crtc->tear_free) {
+			BoxRec extents = { .x1 = 0, .y1 = 0,
+					   .x2 = new_front->drawable.width,
+					   .y2 = new_front->drawable.height };
+			int scanout_id = drmmode_crtc->scanout_id ^ 1;
+
+			if (flip_sync == FLIP_ASYNC) {
+				if (!drmmode_wait_vblank(crtc,
+							 DRM_VBLANK_RELATIVE |
+							 DRM_VBLANK_EVENT,
+							 0, drm_queue_seq,
+							 NULL, NULL))
+					goto flip_error;
+				goto next;
+			}
+
+			fb = amdgpu_pixmap_get_fb(drmmode_crtc->scanout[scanout_id].pixmap);
+			if (!fb) {
+				ErrorF("Failed to get FB for TearFree flip\n");
+				goto error;
+			}
+
+			amdgpu_scanout_do_update(crtc, scanout_id,
+						 &new_front->drawable, &extents);
+
+			drmmode_crtc_wait_pending_event(drmmode_crtc, pAMDGPUEnt->fd,
+							drmmode_crtc->scanout_update_pending);
+		}
+
 		if (crtc == ref_crtc) {
 			if (drmmode_page_flip_target_absolute(pAMDGPUEnt,
 							      drmmode_crtc,
-							      flipdata->fb->handle,
+							      fb->handle,
 							      flip_flags,
 							      drm_queue_seq,
 							      target_msc) != 0)
@@ -2827,14 +2868,20 @@ Bool amdgpu_do_pageflip(ScrnInfoPtr scrn, ClientPtr client,
 		} else {
 			if (drmmode_page_flip_target_relative(pAMDGPUEnt,
 							      drmmode_crtc,
-							      flipdata->fb->handle,
+							      fb->handle,
 							      flip_flags,
 							      drm_queue_seq, 0) != 0)
 				goto flip_error;
 		}
 
-		drmmode_fb_reference(pAMDGPUEnt->fd, &drmmode_crtc->flip_pending,
-				     flipdata->fb);
+		if (drmmode_crtc->tear_free) {
+			drmmode_crtc->scanout_id ^= 1;
+			drmmode_crtc->ignore_damage = TRUE;
+		}
+
+	next:
+		drmmode_fb_reference(pAMDGPUEnt->fd,
+				     &drmmode_crtc->flip_pending, fb);
 		drm_queue_seq = 0;
 	}
 
