@@ -172,6 +172,15 @@ typedef enum {
 #define amdgpu_is_gpu_scrn(scrn) (scrn)->is_gpu
 
 static inline ScreenPtr
+amdgpu_master_screen(ScreenPtr screen)
+{
+	if (screen->current_master)
+		return screen->current_master;
+
+	return screen;
+}
+
+static inline ScreenPtr
 amdgpu_dirty_master(PixmapDirtyUpdatePtr dirty)
 {
 #ifdef HAS_DIRTYTRACKING_DRAWABLE_SRC
@@ -180,10 +189,7 @@ amdgpu_dirty_master(PixmapDirtyUpdatePtr dirty)
 	ScreenPtr screen = dirty->src->drawable.pScreen;
 #endif
 
-	if (screen->current_master)
-		return screen->current_master;
-
-	return screen;
+	return amdgpu_master_screen(screen);
 }
 
 static inline Bool
