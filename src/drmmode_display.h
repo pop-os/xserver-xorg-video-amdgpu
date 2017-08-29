@@ -213,6 +213,9 @@ extern void drmmode_scanout_free(ScrnInfoPtr scrn);
 extern void drmmode_uevent_init(ScrnInfoPtr scrn, drmmode_ptr drmmode);
 extern void drmmode_uevent_fini(ScrnInfoPtr scrn, drmmode_ptr drmmode);
 
+Bool drmmode_set_mode(xf86CrtcPtr crtc, struct drmmode_fb *fb,
+		      DisplayModePtr mode, int x, int y);
+
 extern int drmmode_get_crtc_id(xf86CrtcPtr crtc);
 extern int drmmode_get_pitch_align(ScrnInfoPtr scrn, int bpe);
 Bool amdgpu_do_pageflip(ScrnInfoPtr scrn, ClientPtr client,
