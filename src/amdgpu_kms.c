@@ -32,6 +32,7 @@
 #include <sys/ioctl.h>
 /* Driver data structures */
 #include "amdgpu_drv.h"
+#include "amdgpu_bo_helper.h"
 #include "amdgpu_drm_queue.h"
 #include "amdgpu_glamor.h"
 #include "amdgpu_probe.h"
@@ -1052,11 +1053,10 @@ static void AMDGPUBlockHandler_KMS(BLOCKHANDLER_ARGS_DECL)
 	(*pScreen->BlockHandler) (BLOCKHANDLER_ARGS);
 	pScreen->BlockHandler = AMDGPUBlockHandler_KMS;
 
-	if (!pScrn->vtSema) {
-#if XORG_VERSION_CURRENT < XORG_VERSION_NUMERIC(1,19,0,0,0)
-		if (info->use_glamor)
-			amdgpu_glamor_flush(pScrn);
-#endif
+	if (!xf86ScreenToScrn(amdgpu_master_screen(pScreen))->vtSema) {
+		/* Unreference the all-black FB created by AMDGPULeaveVT_KMS. After
+		 * this, there should be no FB left created by this driver.
+		 */
 
 		for (c = 0; c < xf86_config->num_crtc; c++) {
 			drmmode_crtc_private_ptr drmmode_crtc =
@@ -1967,20 +1967,103 @@ Bool AMDGPUEnterVT_KMS(VT_FUNC_ARGS_DECL)
 	return TRUE;
 }
 
+static void
+pixmap_unref_fb(void *value, XID id, void *cdata)
+{
+	PixmapPtr pixmap = value;
+	AMDGPUEntPtr pAMDGPUEnt = cdata;
+	struct drmmode_fb **fb_ptr = amdgpu_pixmap_get_fb_ptr(pixmap);
+
+	if (fb_ptr)
+		drmmode_fb_reference(pAMDGPUEnt->fd, fb_ptr, NULL);
+}
+
 void AMDGPULeaveVT_KMS(VT_FUNC_ARGS_DECL)
 {
 	SCRN_INFO_PTR(arg);
+	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
+	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(pScrn);
+	ScreenPtr pScreen = pScrn->pScreen;
+	xf86CrtcConfigPtr xf86_config = XF86_CRTC_CONFIG_PTR(pScrn);
+	struct drmmode_scanout black_scanout = { .pixmap = NULL, .bo = NULL };
+	xf86CrtcPtr crtc;
+	drmmode_crtc_private_ptr drmmode_crtc;
+	unsigned w = 0, h = 0;
+	int i;
 
 	xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, AMDGPU_LOGLEVEL_DEBUG,
 		       "AMDGPULeaveVT_KMS\n");
 
-	amdgpu_drop_drm_master(pScrn);
+	/* Compute maximum scanout dimensions of active CRTCs */
+	for (i = 0; i < xf86_config->num_crtc; i++) {
+		crtc = xf86_config->crtc[i];
+		drmmode_crtc = crtc->driver_private;
+
+		if (!drmmode_crtc->fb)
+			continue;
+
+		w = max(w, crtc->mode.HDisplay);
+		h = max(h, crtc->mode.VDisplay);
+	}
+
+	/* Make all active CRTCs scan out from an all-black framebuffer */
+	if (w > 0 && h > 0) {
+		if (drmmode_crtc_scanout_create(crtc, &black_scanout, w, h)) {
+			struct drmmode_fb *black_fb =
+				amdgpu_pixmap_get_fb(black_scanout.pixmap);
+
+			amdgpu_pixmap_clear(black_scanout.pixmap);
+			amdgpu_glamor_finish(pScrn);
+
+			for (i = 0; i < xf86_config->num_crtc; i++) {
+				crtc = xf86_config->crtc[i];
+				drmmode_crtc = crtc->driver_private;
+
+				if (drmmode_crtc->fb) {
+					if (black_fb) {
+						drmmode_set_mode(crtc, black_fb, &crtc->mode, 0, 0);
+					} else {
+						drmModeSetCrtc(pAMDGPUEnt->fd,
+							       drmmode_crtc->mode_crtc->crtc_id, 0, 0,
+							       0, NULL, 0, NULL);
+						drmmode_fb_reference(pAMDGPUEnt->fd, &drmmode_crtc->fb,
+								     NULL);
+					}
+
+					if (pScrn->is_gpu) {
+						if (drmmode_crtc->scanout[0].pixmap)
+							pixmap_unref_fb(drmmode_crtc->scanout[0].pixmap,
+									None, pAMDGPUEnt);
+						if (drmmode_crtc->scanout[1].pixmap)
+							pixmap_unref_fb(drmmode_crtc->scanout[1].pixmap,
+									None, pAMDGPUEnt);
+					} else {
+						drmmode_crtc_scanout_free(drmmode_crtc);
+					}
+				}
+			}
+		}
+	}
 
 	xf86RotateFreeShadow(pScrn);
-	if (!pScrn->is_gpu)
-		drmmode_scanout_free(pScrn);
+	drmmode_crtc_scanout_destroy(&info->drmmode, &black_scanout);
+
+	/* Unreference FBs of all pixmaps. After this, the only FB remaining
+	 * should be the all-black one being scanned out by active CRTCs
+	 */
+	for (i = 0; i < currentMaxClients; i++) {
+		if (i > 0 &&
+		    (!clients[i] || clients[i]->clientState != ClientStateRunning))
+			continue;
+
+		FindClientResourcesByType(clients[i], RT_PIXMAP, pixmap_unref_fb,
+					  pAMDGPUEnt);
+	}
+	pixmap_unref_fb(pScreen->GetScreenPixmap(pScreen), None, pAMDGPUEnt);
 
 	xf86_hide_cursors(pScrn);
+
+	amdgpu_drop_drm_master(pScrn);
 
 	xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, AMDGPU_LOGLEVEL_DEBUG,
 		       "Ok, leaving now...\n");
