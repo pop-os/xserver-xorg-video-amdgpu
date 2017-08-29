@@ -120,6 +120,26 @@ struct amdgpu_buffer *amdgpu_alloc_pixmap_bo(ScrnInfoPtr pScrn, int width,
 	return pixmap_buffer;
 }
 
+/* Clear the pixmap contents to black */
+void
+amdgpu_pixmap_clear(PixmapPtr pixmap)
+{
+	ScreenPtr screen = pixmap->drawable.pScreen;
+	AMDGPUInfoPtr info = AMDGPUPTR(xf86ScreenToScrn(screen));
+	GCPtr gc = GetScratchGC(pixmap->drawable.depth, screen);
+	xRectangle rect;
+
+	ValidateGC(&pixmap->drawable, gc);
+	rect.x = 0;
+	rect.y = 0;
+	rect.width = pixmap->drawable.width;
+	rect.height = pixmap->drawable.height;
+	info->force_accel = TRUE;
+	gc->ops->PolyFillRect(&pixmap->drawable, gc, 1, &rect);
+	info->force_accel = FALSE;
+	FreeScratchGC(gc);
+}
+
 Bool amdgpu_bo_get_handle(struct amdgpu_buffer *bo, uint32_t *handle)
 {
 	if (bo->flags & AMDGPU_BO_FLAGS_GBM) {

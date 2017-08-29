@@ -2116,8 +2116,6 @@ static Bool drmmode_xf86crtc_resize(ScrnInfoPtr scrn, int width, int height)
 	PixmapPtr ppix = screen->GetScreenPixmap(screen);
 	void *fb_shadow;
 	int hint = 0;
-	xRectangle rect;
-	GCPtr gc;
 
 	if (scrn->virtualX == width && scrn->virtualY == height)
 		return TRUE;
@@ -2181,17 +2179,7 @@ static Bool drmmode_xf86crtc_resize(ScrnInfoPtr scrn, int width, int height)
 			goto fail;
 	}
 
-	/* Clear new buffer */
-	gc = GetScratchGC(ppix->drawable.depth, scrn->pScreen);
-	ValidateGC(&ppix->drawable, gc);
-	rect.x = 0;
-	rect.y = 0;
-	rect.width = width;
-	rect.height = height;
-	info->force_accel = TRUE;
-	(*gc->ops->PolyFillRect)(&ppix->drawable, gc, 1, &rect);
-	info->force_accel = FALSE;
-	FreeScratchGC(gc);
+	amdgpu_pixmap_clear(ppix);
 	amdgpu_glamor_finish(scrn);
 
 	for (i = 0; i < xf86_config->num_crtc; i++) {
