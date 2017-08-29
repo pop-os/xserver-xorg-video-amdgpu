@@ -121,24 +121,10 @@ amdgpu_fb_create(int drm_fd, uint32_t width, uint32_t height, uint8_t depth,
 	return NULL;
 }
 
-static inline struct drmmode_fb*
-amdgpu_pixmap_create_fb(int drm_fd, PixmapPtr pix)
-{
-	uint32_t handle;
-
-	if (!amdgpu_pixmap_get_handle(pix, &handle))
-		return NULL;
-
-	return amdgpu_fb_create(drm_fd, pix->drawable.width, pix->drawable.height,
-				pix->drawable.depth, pix->drawable.bitsPerPixel,
-				pix->devKind, handle);
-}
-
-static inline struct drmmode_fb*
-amdgpu_pixmap_get_fb(PixmapPtr pix)
+static inline struct drmmode_fb**
+amdgpu_pixmap_get_fb_ptr(PixmapPtr pix)
 {
 	ScrnInfoPtr scrn = xf86ScreenToScrn(pix->drawable.pScreen);
-	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(scrn);
 	AMDGPUInfoPtr info = AMDGPUPTR(scrn);
 
 	if (info->use_glamor) {
@@ -147,13 +133,35 @@ amdgpu_pixmap_get_fb(PixmapPtr pix)
 		if (!priv)
 			return NULL;
 
-		if (!priv->fb)
-			priv->fb = amdgpu_pixmap_create_fb(pAMDGPUEnt->fd, pix);
-
-		return priv->fb;
+		return &priv->fb;
 	}
 
 	return NULL;
+}
+
+static inline struct drmmode_fb*
+amdgpu_pixmap_get_fb(PixmapPtr pix)
+{
+	struct drmmode_fb **fb_ptr = amdgpu_pixmap_get_fb_ptr(pix);
+
+	if (!fb_ptr)
+		return NULL;
+
+	if (!*fb_ptr) {
+		uint32_t handle;
+
+		if (amdgpu_pixmap_get_handle(pix, &handle)) {
+			ScrnInfoPtr scrn = xf86ScreenToScrn(pix->drawable.pScreen);
+			AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(scrn);
+
+			*fb_ptr = amdgpu_fb_create(pAMDGPUEnt->fd, pix->drawable.width,
+						   pix->drawable.height, pix->drawable.depth,
+						   pix->drawable.bitsPerPixel, pix->devKind,
+						   handle);
+		}
+	}
+
+	return *fb_ptr;
 }
 
 enum {
