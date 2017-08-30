@@ -1044,7 +1044,6 @@ static void AMDGPUBlockHandler_KMS(BLOCKHANDLER_ARGS_DECL)
 {
 	SCREEN_PTR(arg);
 	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(pScrn);
 	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
 	xf86CrtcConfigPtr xf86_config = XF86_CRTC_CONFIG_PTR(pScrn);
 	int c;
@@ -1053,21 +1052,8 @@ static void AMDGPUBlockHandler_KMS(BLOCKHANDLER_ARGS_DECL)
 	(*pScreen->BlockHandler) (BLOCKHANDLER_ARGS);
 	pScreen->BlockHandler = AMDGPUBlockHandler_KMS;
 
-	if (!xf86ScreenToScrn(amdgpu_master_screen(pScreen))->vtSema) {
-		/* Unreference the all-black FB created by AMDGPULeaveVT_KMS. After
-		 * this, there should be no FB left created by this driver.
-		 */
-
-		for (c = 0; c < xf86_config->num_crtc; c++) {
-			drmmode_crtc_private_ptr drmmode_crtc =
-				xf86_config->crtc[c]->driver_private;
-
-			drmmode_fb_reference(pAMDGPUEnt->fd, &drmmode_crtc->fb,
-					     NULL);
-		}
-
+	if (!xf86ScreenToScrn(amdgpu_master_screen(pScreen))->vtSema)
 		return;
-	}
 
 	if (!amdgpu_is_gpu_screen(pScreen))
 	{
@@ -1629,6 +1615,30 @@ static void amdgpu_drop_drm_master(ScrnInfoPtr pScrn)
 }
 
 
+static
+CARD32 cleanup_black_fb(OsTimerPtr timer, CARD32 now, pointer data)
+{
+	ScreenPtr screen = data;
+	ScrnInfoPtr scrn = xf86ScreenToScrn(screen);
+	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(scrn);
+	xf86CrtcConfigPtr xf86_config = XF86_CRTC_CONFIG_PTR(scrn);
+	int c;
+
+	if (xf86ScreenToScrn(amdgpu_master_screen(screen))->vtSema)
+		return 0;
+
+	/* Unreference the all-black FB created by AMDGPULeaveVT_KMS. After
+	 * this, there should be no FB left created by this driver.
+	 */
+	for (c = 0; c < xf86_config->num_crtc; c++) {
+		drmmode_crtc_private_ptr drmmode_crtc =
+			xf86_config->crtc[c]->driver_private;
+
+		drmmode_fb_reference(pAMDGPUEnt->fd, &drmmode_crtc->fb, NULL);
+	}
+
+	return 0;
+}
 
 static Bool AMDGPUSaveScreen_KMS(ScreenPtr pScreen, int mode)
 {
@@ -2060,6 +2070,8 @@ void AMDGPULeaveVT_KMS(VT_FUNC_ARGS_DECL)
 					  pAMDGPUEnt);
 	}
 	pixmap_unref_fb(pScreen->GetScreenPixmap(pScreen), None, pAMDGPUEnt);
+
+	TimerSet(NULL, 0, 1000, cleanup_black_fb, pScreen);
 
 	xf86_hide_cursors(pScrn);
 
