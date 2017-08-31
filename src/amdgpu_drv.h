@@ -166,11 +166,6 @@ typedef enum {
 	OPTION_DELETE_DP12,
 } AMDGPUOpts;
 
-#if XF86_CRTC_VERSION >= 5
-#define AMDGPU_PIXMAP_SHARING 1
-#define amdgpu_is_gpu_screen(screen) (screen)->isGPU
-#define amdgpu_is_gpu_scrn(scrn) (scrn)->is_gpu
-
 static inline ScreenPtr
 amdgpu_master_screen(ScreenPtr screen)
 {
@@ -202,10 +197,6 @@ amdgpu_dirty_src_equals(PixmapDirtyUpdatePtr dirty, PixmapPtr pixmap)
 #endif
 }
 
-#else
-#define amdgpu_is_gpu_screen(screen) 0
-#define amdgpu_is_gpu_scrn(scrn) 0
-#endif
 
 #define AMDGPU_VSYNC_TIMEOUT	20000	/* Maximum wait for VSYNC (in usecs) */
 
@@ -218,7 +209,6 @@ amdgpu_dirty_src_equals(PixmapDirtyUpdatePtr dirty, PixmapPtr pixmap)
 #define AMDGPU_LOGLEVEL_DEBUG 4
 
 /* Other macros */
-#define AMDGPU_ARRAY_SIZE(x)  (sizeof(x)/sizeof(x[0]))
 #define AMDGPU_ALIGN(x,bytes) (((x) + ((bytes) - 1)) & ~((bytes) - 1))
 #define AMDGPUPTR(pScrn)      ((AMDGPUInfoPtr)(pScrn)->driverPrivate)
 
@@ -251,7 +241,7 @@ typedef struct {
 	uint32_t family;
 	struct gbm_device *gbm;
 
-	 Bool(*CloseScreen) (CLOSE_SCREEN_ARGS_DECL);
+	Bool(*CloseScreen) (ScreenPtr pScreen);
 
 	void (*BlockHandler) (BLOCKHANDLER_ARGS_DECL);
 
@@ -333,10 +323,8 @@ typedef struct {
 		AddTrapsProcPtr SavedAddTraps;
 		UnrealizeGlyphProcPtr SavedUnrealizeGlyph;
 #endif
-#ifdef AMDGPU_PIXMAP_SHARING
 		SharePixmapBackingProcPtr SavedSharePixmapBacking;
 		SetSharedPixmapBackingProcPtr SavedSetSharedPixmapBacking;
-#endif
 	} glamor;
 
 } AMDGPUInfoRec, *AMDGPUInfoPtr;

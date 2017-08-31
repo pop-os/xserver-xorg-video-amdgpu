@@ -79,13 +79,8 @@ struct amdgpu_buffer *amdgpu_alloc_pixmap_bo(ScrnInfoPtr pScrn, int width,
 			bo_use |= GBM_BO_USE_SCANOUT;
 
 #ifdef HAVE_GBM_BO_USE_LINEAR
-#ifdef CREATE_PIXMAP_USAGE_SHARED
-		if (usage_hint == CREATE_PIXMAP_USAGE_SHARED) {
-			bo_use |= GBM_BO_USE_LINEAR;
-		}
-#endif
-
-		if (usage_hint & AMDGPU_CREATE_PIXMAP_LINEAR) {
+		if (usage_hint == CREATE_PIXMAP_USAGE_SHARED ||
+		    (usage_hint & AMDGPU_CREATE_PIXMAP_LINEAR)) {
 			bo_use |= GBM_BO_USE_LINEAR;
 		}
 #endif
@@ -394,7 +389,6 @@ struct amdgpu_buffer *amdgpu_gem_bo_open_prime(amdgpu_device_handle pDev,
 	return bo;
 }
 
-#ifdef AMDGPU_PIXMAP_SHARING
 
 Bool amdgpu_set_shared_pixmap_backing(PixmapPtr ppix, void *fd_handle)
 {
@@ -467,5 +461,3 @@ Bool amdgpu_set_shared_pixmap_backing(PixmapPtr ppix, void *fd_handle)
 
 	return ret;
 }
-
-#endif /* AMDGPU_PIXMAP_SHARING */

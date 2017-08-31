@@ -317,7 +317,6 @@ amdgpu_glamor_set_pixmap_bo(DrawablePtr drawable, PixmapPtr pixmap)
 	return old;
 }
 
-#ifdef AMDGPU_PIXMAP_SHARING
 
 static Bool
 amdgpu_glamor_share_pixmap_backing(PixmapPtr pixmap, ScreenPtr slave,
@@ -383,7 +382,6 @@ amdgpu_glamor_set_shared_pixmap_backing(PixmapPtr pixmap, void *handle)
 	return TRUE;
 }
 
-#endif /* AMDGPU_PIXMAP_SHARING */
 
 Bool amdgpu_glamor_init(ScreenPtr screen)
 {
@@ -440,13 +438,11 @@ Bool amdgpu_glamor_init(ScreenPtr screen)
 	screen->CreatePixmap = amdgpu_glamor_create_pixmap;
 	info->glamor.SavedDestroyPixmap = screen->DestroyPixmap;
 	screen->DestroyPixmap = amdgpu_glamor_destroy_pixmap;
-#ifdef AMDGPU_PIXMAP_SHARING
 	info->glamor.SavedSharePixmapBacking = screen->SharePixmapBacking;
 	screen->SharePixmapBacking = amdgpu_glamor_share_pixmap_backing;
 	info->glamor.SavedSetSharedPixmapBacking = screen->SetSharedPixmapBacking;
 	screen->SetSharedPixmapBacking =
 	    amdgpu_glamor_set_shared_pixmap_backing;
-#endif
 
 	xf86DrvMsg(scrn->scrnIndex, X_INFO, "Use GLAMOR acceleration.\n");
 	return TRUE;
@@ -488,10 +484,8 @@ amdgpu_glamor_fini(ScreenPtr screen)
 
 	screen->CreatePixmap = info->glamor.SavedCreatePixmap;
 	screen->DestroyPixmap = info->glamor.SavedDestroyPixmap;
-#ifdef AMDGPU_PIXMAP_SHARING
 	screen->SharePixmapBacking = info->glamor.SavedSharePixmapBacking;
 	screen->SetSharedPixmapBacking = info->glamor.SavedSetSharedPixmapBacking;
-#endif
 }
 
 XF86VideoAdaptorPtr amdgpu_glamor_xv_init(ScreenPtr pScreen, int num_adapt)

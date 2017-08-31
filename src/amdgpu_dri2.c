@@ -48,14 +48,9 @@
 #include "amdgpu_bo_helper.h"
 #include "amdgpu_version.h"
 
-#include "amdgpu_list.h"
-
+#include <list.h>
 #include <xf86Priv.h>
 #include <X11/extensions/dpmsconst.h>
-
-#if DRI2INFOREC_VERSION >= 9
-#define USE_DRI2_PRIME
-#endif
 
 #define FALLBACK_SWAP_DELAY 16
 
@@ -204,14 +199,6 @@ error:
 	return NULL;
 }
 
-DRI2BufferPtr
-amdgpu_dri2_create_buffer(DrawablePtr pDraw, unsigned int attachment,
-			  unsigned int format)
-{
-	return amdgpu_dri2_create_buffer2(pDraw->pScreen, pDraw,
-					  attachment, format);
-}
-
 static void
 amdgpu_dri2_destroy_buffer2(ScreenPtr pScreen,
 			    DrawablePtr drawable, BufferPtr buffers)
@@ -238,11 +225,6 @@ amdgpu_dri2_destroy_buffer2(ScreenPtr pScreen,
 			free(buffers);
 		}
 	}
-}
-
-void amdgpu_dri2_destroy_buffer(DrawablePtr pDraw, DRI2BufferPtr buf)
-{
-	amdgpu_dri2_destroy_buffer2(pDraw->pScreen, pDraw, buf);
 }
 
 static inline PixmapPtr GetDrawablePixmap(DrawablePtr drawable)
@@ -274,17 +256,14 @@ amdgpu_dri2_copy_region2(ScreenPtr pScreen,
 	dst_drawable = &dst_private->pixmap->drawable;
 
 	if (src_private->attachment == DRI2BufferFrontLeft) {
-#ifdef USE_DRI2_PRIME
 		if (drawable->pScreen != pScreen) {
 			src_drawable = DRI2UpdatePrime(drawable, src_buffer);
 			if (!src_drawable)
 				return;
 		} else
-#endif
 			src_drawable = drawable;
 	}
 	if (dst_private->attachment == DRI2BufferFrontLeft) {
-#ifdef USE_DRI2_PRIME
 		if (drawable->pScreen != pScreen) {
 			dst_drawable = DRI2UpdatePrime(drawable, dest_buffer);
 			if (!dst_drawable)
@@ -292,7 +271,6 @@ amdgpu_dri2_copy_region2(ScreenPtr pScreen,
 			if (dst_drawable != drawable)
 				translate = TRUE;
 		} else
-#endif
 			dst_drawable = drawable;
 	}
 
@@ -318,14 +296,6 @@ amdgpu_dri2_copy_region2(ScreenPtr pScreen,
 			      off_y);
 
 	FreeScratchGC(gc);
-}
-
-void
-amdgpu_dri2_copy_region(DrawablePtr pDraw, RegionPtr pRegion,
-			DRI2BufferPtr pDstBuffer, DRI2BufferPtr pSrcBuffer)
-{
-	return amdgpu_dri2_copy_region2(pDraw->pScreen, pDraw, pRegion,
-					pDstBuffer, pSrcBuffer);
 }
 
 enum DRI2FrameEventType {
@@ -362,8 +332,9 @@ static void amdgpu_dri2_unref_buffer(BufferPtr buffer)
 {
 	if (buffer) {
 		struct dri2_buffer_priv *private = buffer->driverPrivate;
-		amdgpu_dri2_destroy_buffer(&(private->pixmap->drawable),
-					   buffer);
+		DrawablePtr draw = &private->pixmap->drawable;
+
+		amdgpu_dri2_destroy_buffer2(draw->pScreen, draw, buffer);
 	}
 }
 
@@ -751,8 +722,8 @@ static void amdgpu_dri2_frame_event_handler(xf86CrtcPtr crtc, uint32_t seq,
 			box.x2 = drawable->width;
 			box.y2 = drawable->height;
 			REGION_INIT(pScreen, &region, &box, 0);
-			amdgpu_dri2_copy_region(drawable, &region, event->front,
-						event->back);
+			amdgpu_dri2_copy_region2(drawable->pScreen, drawable, &region,
+						 event->front, event->back);
 			swap_type = DRI2_BLIT_COMPLETE;
 		}
 
@@ -1286,7 +1257,7 @@ blit_fallback:
 		box.y2 = draw->height;
 		REGION_INIT(pScreen, &region, &box, 0);
 
-		amdgpu_dri2_copy_region(draw, &region, front, back);
+		amdgpu_dri2_copy_region2(draw->pScreen, draw, &region, front, back);
 
 		DRI2SwapComplete(client, draw, 0, 0, 0, DRI2_BLIT_COMPLETE, func, data);
 
@@ -1315,10 +1286,6 @@ Bool amdgpu_dri2_screen_init(ScreenPtr pScreen)
 	dri2_info.driverName = SI_DRIVER_NAME;
 	dri2_info.fd = pAMDGPUEnt->fd;
 	dri2_info.deviceName = info->dri2.device_name;
-	dri2_info.version = DRI2INFOREC_VERSION;
-	dri2_info.CreateBuffer = amdgpu_dri2_create_buffer;
-	dri2_info.DestroyBuffer = amdgpu_dri2_destroy_buffer;
-	dri2_info.CopyRegion = amdgpu_dri2_copy_region;
 
 	if (info->drmmode.count_crtcs > 2) {
 		uint64_t cap_value;
@@ -1338,11 +1305,10 @@ Bool amdgpu_dri2_screen_init(ScreenPtr pScreen)
 	}
 
 	if (scheduling_works) {
-		dri2_info.version = 4;
 		dri2_info.ScheduleSwap = amdgpu_dri2_schedule_swap;
 		dri2_info.GetMSC = amdgpu_dri2_get_msc;
 		dri2_info.ScheduleWaitMSC = amdgpu_dri2_schedule_wait_msc;
-		dri2_info.numDrivers = AMDGPU_ARRAY_SIZE(driverNames);
+		dri2_info.numDrivers = ARRAY_SIZE(driverNames);
 		dri2_info.driverNames = driverNames;
 		driverNames[0] = driverNames[1] = dri2_info.driverName;
 
@@ -1362,12 +1328,10 @@ Bool amdgpu_dri2_screen_init(ScreenPtr pScreen)
 		DRI2InfoCnt++;
 	}
 
-#if DRI2INFOREC_VERSION >= 9
 	dri2_info.version = 9;
 	dri2_info.CreateBuffer2 = amdgpu_dri2_create_buffer2;
 	dri2_info.DestroyBuffer2 = amdgpu_dri2_destroy_buffer2;
 	dri2_info.CopyRegion2 = amdgpu_dri2_copy_region2;
-#endif
 
 	info->dri2.enabled = DRI2ScreenInit(pScreen, &dri2_info);
 	return info->dri2.enabled;

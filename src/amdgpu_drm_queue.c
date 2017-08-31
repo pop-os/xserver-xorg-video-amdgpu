@@ -31,10 +31,11 @@
 #endif
 
 #include <xorg-server.h>
+#include <X11/Xdefs.h>
+#include <list.h>
 
 #include "amdgpu_drv.h"
 #include "amdgpu_drm_queue.h"
-#include "amdgpu_list.h"
 
 
 struct amdgpu_drm_queue_entry {
