@@ -32,6 +32,7 @@
 #include <sys/ioctl.h>
 /* Driver data structures */
 #include "amdgpu_drv.h"
+#include "amdgpu_bo_helper.h"
 #include "amdgpu_drm_queue.h"
 #include "amdgpu_glamor.h"
 #include "amdgpu_probe.h"
@@ -40,6 +41,10 @@
 #include "amdgpu_version.h"
 #include "shadow.h"
 #include <xf86Priv.h>
+
+#if HAVE_PRESENT_H
+#include <present.h>
+#endif
 
 /* DPMS */
 #ifdef HAVE_XEXTPROTO_71
@@ -232,9 +237,7 @@ static Bool AMDGPUCreateScreenResources_KMS(ScreenPtr pScreen)
 	if (dixPrivateKeyRegistered(rrPrivKey)) {
 		rrScrPrivPtr rrScrPriv = rrGetScrPriv(pScreen);
 
-		if (!amdgpu_is_gpu_screen(pScreen) &&
-		    !rrScrPriv->primaryOutput)
-		{
+		if (!pScreen->isGPU && !rrScrPriv->primaryOutput) {
 			xf86CrtcConfigPtr xf86_config = XF86_CRTC_CONFIG_PTR(pScrn);
 
 			rrScrPriv->primaryOutput = xf86_config->output[0]->randr_output;
@@ -243,8 +246,7 @@ static Bool AMDGPUCreateScreenResources_KMS(ScreenPtr pScreen)
 		}
 	}
 
-	if (!drmmode_set_desired_modes(pScrn, &info->drmmode,
-				       amdgpu_is_gpu_screen(pScreen)))
+	if (!drmmode_set_desired_modes(pScrn, &info->drmmode, pScreen->isGPU))
 		return FALSE;
 
 	drmmode_uevent_init(pScrn, &info->drmmode);
@@ -270,8 +272,7 @@ static Bool AMDGPUCreateScreenResources_KMS(ScreenPtr pScreen)
 		amdgpu_glamor_create_screen_resources(pScreen);
 
 	info->callback_event_type = -1;
-	if (!amdgpu_is_gpu_screen(pScreen) &&
-		(damage_ext = CheckExtension("DAMAGE"))) {
+	if (!pScreen->isGPU && (damage_ext = CheckExtension("DAMAGE"))) {
 		info->callback_event_type = damage_ext->eventBase + XDamageNotify;
 
 		if (!AddCallback(&FlushCallback, amdgpu_flush_callback, pScrn))
@@ -296,15 +297,12 @@ static Bool AMDGPUCreateScreenResources_KMS(ScreenPtr pScreen)
 static Bool
 amdgpu_scanout_extents_intersect(xf86CrtcPtr xf86_crtc, BoxPtr extents)
 {
-#ifdef AMDGPU_PIXMAP_SHARING
 	if (xf86_crtc->scrn->is_gpu) {
 		extents->x1 -= xf86_crtc->x;
 		extents->y1 -= xf86_crtc->y;
 		extents->x2 -= xf86_crtc->x;
 		extents->y2 -= xf86_crtc->y;
-	} else
-#endif
-	{
+	} else {
 		extents->x1 -= xf86_crtc->filter_width >> 1;
 		extents->x2 += xf86_crtc->filter_width >> 1;
 		extents->y1 -= xf86_crtc->filter_height >> 1;
@@ -319,8 +317,6 @@ amdgpu_scanout_extents_intersect(xf86CrtcPtr xf86_crtc, BoxPtr extents)
 
 	return (extents->x1 < extents->x2 && extents->y1 < extents->y2);
 }
-
-#if XF86_CRTC_VERSION >= 4
 
 static RegionPtr
 transform_region(RegionPtr region, struct pict_f_transform *transform,
@@ -360,8 +356,6 @@ transform_region(RegionPtr region, struct pict_f_transform *transform,
 	return transformed;
 }
 
-#endif
-
 static void
 amdgpu_sync_scanout_pixmaps(xf86CrtcPtr xf86_crtc, RegionPtr new_region,
 							int scanout_id)
@@ -389,14 +383,11 @@ amdgpu_sync_scanout_pixmaps(xf86CrtcPtr xf86_crtc, RegionPtr new_region,
 	if (!amdgpu_scanout_extents_intersect(xf86_crtc, &extents))
 		goto uninit;
 
-#if XF86_CRTC_VERSION >= 4
 	if (xf86_crtc->driverIsPerformingTransform) {
 		sync_region = transform_region(&remaining,
 					       &xf86_crtc->f_framebuffer_to_crtc,
 					       dst->width, dst->height);
-	} else
-#endif /* XF86_CRTC_VERSION >= 4 */
-	{
+	} else {
 		sync_region = RegionDuplicate(&remaining);
 		RegionTranslate(sync_region, -xf86_crtc->x, -xf86_crtc->y);
 	}
@@ -416,7 +407,38 @@ amdgpu_sync_scanout_pixmaps(xf86CrtcPtr xf86_crtc, RegionPtr new_region,
 	RegionUninit(&remaining);
 }
 
-#ifdef AMDGPU_PIXMAP_SHARING
+static void
+amdgpu_scanout_flip_abort(xf86CrtcPtr crtc, void *event_data)
+{
+	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(crtc->scrn);
+	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
+
+	drmmode_crtc->scanout_update_pending = FALSE;
+	drmmode_fb_reference(pAMDGPUEnt->fd, &drmmode_crtc->flip_pending,
+			     NULL);
+}
+
+static void
+amdgpu_scanout_flip_handler(xf86CrtcPtr crtc, uint32_t msc, uint64_t usec,
+			    void *event_data)
+{
+	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(crtc->scrn);
+	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
+
+	drmmode_fb_reference(pAMDGPUEnt->fd, &drmmode_crtc->fb,
+			     drmmode_crtc->flip_pending);
+	amdgpu_scanout_flip_abort(crtc, event_data);
+
+#ifdef HAVE_PRESENT_H
+	if (drmmode_crtc->present_vblank_event_id) {
+		present_event_notify(drmmode_crtc->present_vblank_event_id,
+				     drmmode_crtc->present_vblank_usec,
+				     drmmode_crtc->present_vblank_msc);
+		drmmode_crtc->present_vblank_event_id = 0;
+	}
+#endif
+}
+
 
 static RegionPtr
 dirty_region(PixmapDirtyUpdatePtr dirty)
@@ -448,7 +470,7 @@ dirty_region(PixmapDirtyUpdatePtr dirty)
 static void
 redisplay_dirty(PixmapDirtyUpdatePtr dirty, RegionPtr region)
 {
-	ScrnInfoPtr scrn = xf86ScreenToScrn(dirty->src->drawable.pScreen);
+	ScrnInfoPtr scrn = xf86ScreenToScrn(dirty->slave_dst->drawable.pScreen);
 
 	if (RegionNil(region))
 		goto out;
@@ -481,12 +503,12 @@ amdgpu_prime_scanout_update_abort(xf86CrtcPtr crtc, void *event_data)
 void
 amdgpu_sync_shared_pixmap(PixmapDirtyUpdatePtr dirty)
 {
-	ScreenPtr master_screen = dirty->src->master_pixmap->drawable.pScreen;
+	ScreenPtr master_screen = amdgpu_dirty_master(dirty);
 	PixmapDirtyUpdatePtr ent;
 	RegionPtr region;
 
 	xorg_list_for_each_entry(ent, &master_screen->pixmap_dirty_list, ent) {
-		if (ent->slave_dst != dirty->src)
+		if (!amdgpu_dirty_src_equals(dirty, ent->slave_dst))
 			continue;
 
 		region = dirty_region(ent);
@@ -501,7 +523,7 @@ amdgpu_sync_shared_pixmap(PixmapDirtyUpdatePtr dirty)
 static Bool
 master_has_sync_shared_pixmap(ScrnInfoPtr scrn, PixmapDirtyUpdatePtr dirty)
 {
-	ScreenPtr master_screen = dirty->src->master_pixmap->drawable.pScreen;
+	ScreenPtr master_screen = amdgpu_dirty_master(dirty);
 
 	return master_screen->SyncSharedPixmap != NULL;
 }
@@ -517,7 +539,7 @@ slave_has_sync_shared_pixmap(ScrnInfoPtr scrn, PixmapDirtyUpdatePtr dirty)
 static void
 call_sync_shared_pixmap(PixmapDirtyUpdatePtr dirty)
 {
-	ScreenPtr master_screen = dirty->src->master_pixmap->drawable.pScreen;
+	ScreenPtr master_screen = amdgpu_dirty_master(dirty);
 
 	master_screen->SyncSharedPixmap(dirty);
 }
@@ -527,7 +549,7 @@ call_sync_shared_pixmap(PixmapDirtyUpdatePtr dirty)
 static Bool
 master_has_sync_shared_pixmap(ScrnInfoPtr scrn, PixmapDirtyUpdatePtr dirty)
 {
-	ScrnInfoPtr master_scrn = xf86ScreenToScrn(dirty->src->master_pixmap->drawable.pScreen);
+	ScrnInfoPtr master_scrn = xf86ScreenToScrn(amdgpu_dirty_master(dirty));
 
 	return master_scrn->driverName == scrn->driverName;
 }
@@ -562,8 +584,7 @@ amdgpu_prime_dirty_to_crtc(PixmapDirtyUpdatePtr dirty)
 		xf86CrtcPtr xf86_crtc = xf86_config->crtc[c];
 		drmmode_crtc_private_ptr drmmode_crtc = xf86_crtc->driver_private;
 
-		if (drmmode_crtc->scanout[0].pixmap == dirty->slave_dst ||
-			drmmode_crtc->scanout[1].pixmap == dirty->slave_dst)
+		if (amdgpu_dirty_src_equals(dirty, drmmode_crtc->prime_scanout_pixmap))
 			return xf86_crtc;
 	}
 
@@ -576,13 +597,11 @@ amdgpu_prime_scanout_do_update(xf86CrtcPtr crtc, unsigned scanout_id)
 	ScrnInfoPtr scrn = crtc->scrn;
 	ScreenPtr screen = scrn->pScreen;
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
-	PixmapPtr scanoutpix = crtc->randr_crtc->scanout_pixmap;
 	PixmapDirtyUpdatePtr dirty;
 	Bool ret = FALSE;
 
 	xorg_list_for_each_entry(dirty, &screen->pixmap_dirty_list, ent) {
-		if (dirty->src == scanoutpix && dirty->slave_dst ==
-		    drmmode_crtc->scanout[scanout_id ^ drmmode_crtc->tear_free].pixmap) {
+		if (amdgpu_dirty_src_equals(dirty, drmmode_crtc->prime_scanout_pixmap)) {
 			RegionPtr region;
 
 			if (master_has_sync_shared_pixmap(scrn, dirty))
@@ -627,19 +646,17 @@ amdgpu_prime_scanout_update(PixmapDirtyUpdatePtr dirty)
 {
 	ScreenPtr screen = dirty->slave_dst->drawable.pScreen;
 	ScrnInfoPtr scrn = xf86ScreenToScrn(screen);
-	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(scrn);
 	xf86CrtcPtr xf86_crtc = amdgpu_prime_dirty_to_crtc(dirty);
 	drmmode_crtc_private_ptr drmmode_crtc;
 	uintptr_t drm_queue_seq;
-	drmVBlank vbl;
 
 	if (!xf86_crtc || !xf86_crtc->enabled)
 		return;
 
 	drmmode_crtc = xf86_crtc->driver_private;
 	if (drmmode_crtc->scanout_update_pending ||
-	    !drmmode_crtc->scanout[0].pixmap ||
-	    drmmode_crtc->pending_dpms_mode != DPMSModeOn)
+	    !drmmode_crtc->scanout[drmmode_crtc->scanout_id].pixmap ||
+	    drmmode_crtc->dpms_mode != DPMSModeOn)
 		return;
 
 	drm_queue_seq = amdgpu_drm_queue_alloc(xf86_crtc,
@@ -653,28 +670,16 @@ amdgpu_prime_scanout_update(PixmapDirtyUpdatePtr dirty)
 		return;
 	}
 
-	vbl.request.type = DRM_VBLANK_RELATIVE | DRM_VBLANK_EVENT;
-	vbl.request.type |= amdgpu_populate_vbl_request_type(xf86_crtc);
-	vbl.request.sequence = 1;
-	vbl.request.signal = drm_queue_seq;
-	if (drmWaitVBlank(pAMDGPUEnt->fd, &vbl)) {
+	if (!drmmode_wait_vblank(xf86_crtc, DRM_VBLANK_RELATIVE | DRM_VBLANK_EVENT,
+				 1, drm_queue_seq, NULL, NULL)) {
 		xf86DrvMsg(scrn->scrnIndex, X_WARNING,
-			   "drmWaitVBlank failed for PRIME update: %s\n",
+			   "drmmode_wait_vblank failed for PRIME update: %s\n",
 			   strerror(errno));
 		amdgpu_drm_abort_entry(drm_queue_seq);
 		return;
 	}
 
 	drmmode_crtc->scanout_update_pending = TRUE;
-}
-
-static void
-amdgpu_prime_scanout_flip_abort(xf86CrtcPtr crtc, void *event_data)
-{
-	drmmode_crtc_private_ptr drmmode_crtc = event_data;
-
-	drmmode_crtc->scanout_update_pending = FALSE;
-	drmmode_clear_pending_flip(crtc);
 }
 
 static void
@@ -694,7 +699,7 @@ amdgpu_prime_scanout_flip(PixmapDirtyUpdatePtr ent)
 	drmmode_crtc = crtc->driver_private;
 	if (drmmode_crtc->scanout_update_pending ||
 	    !drmmode_crtc->scanout[drmmode_crtc->scanout_id].pixmap ||
-	    drmmode_crtc->pending_dpms_mode != DPMSModeOn)
+	    drmmode_crtc->dpms_mode != DPMSModeOn)
 		return;
 
 	scanout_id = drmmode_crtc->scanout_id ^ 1;
@@ -704,16 +709,26 @@ amdgpu_prime_scanout_flip(PixmapDirtyUpdatePtr ent)
 	drm_queue_seq = amdgpu_drm_queue_alloc(crtc,
 					       AMDGPU_DRM_QUEUE_CLIENT_DEFAULT,
 					       AMDGPU_DRM_QUEUE_ID_DEFAULT,
-					       drmmode_crtc, NULL,
-					       amdgpu_prime_scanout_flip_abort);
+					       NULL,
+					       amdgpu_scanout_flip_handler,
+					       amdgpu_scanout_flip_abort);
 	if (drm_queue_seq == AMDGPU_DRM_QUEUE_ERROR) {
 		xf86DrvMsg(scrn->scrnIndex, X_WARNING,
 			   "Allocating DRM event queue entry failed for PRIME flip.\n");
 		return;
 	}
 
+	drmmode_fb_reference(pAMDGPUEnt->fd, &drmmode_crtc->flip_pending,
+			     amdgpu_pixmap_get_fb(drmmode_crtc->scanout[scanout_id].pixmap));
+	if (!drmmode_crtc->flip_pending) {
+		xf86DrvMsg(scrn->scrnIndex, X_WARNING,
+			   "Failed to get FB for PRIME flip.\n");
+		amdgpu_drm_abort_entry(drm_queue_seq);
+		return;
+	}
+
 	if (drmmode_page_flip_target_relative(pAMDGPUEnt, drmmode_crtc,
-					      drmmode_crtc->scanout[scanout_id].fb_id,
+					      drmmode_crtc->flip_pending->handle,
 					      0, drm_queue_seq, 0) != 0) {
 		xf86DrvMsg(scrn->scrnIndex, X_WARNING, "flip queue failed in %s: %s\n",
 			   __func__, strerror(errno));
@@ -723,7 +738,6 @@ amdgpu_prime_scanout_flip(PixmapDirtyUpdatePtr ent)
 
 	drmmode_crtc->scanout_id = scanout_id;
 	drmmode_crtc->scanout_update_pending = TRUE;
-	drmmode_crtc->flip_pending = TRUE;
 }
 
 static void
@@ -738,10 +752,10 @@ amdgpu_dirty_update(ScrnInfoPtr scrn)
 			PixmapDirtyUpdatePtr region_ent = ent;
 
 			if (master_has_sync_shared_pixmap(scrn, ent)) {
-				ScreenPtr master_screen = ent->src->master_pixmap->drawable.pScreen;
+				ScreenPtr master_screen = amdgpu_dirty_master(ent);
 
 				xorg_list_for_each_entry(region_ent, &master_screen->pixmap_dirty_list, ent) {
-					if (region_ent->slave_dst == ent->src)
+					if (amdgpu_dirty_src_equals(ent, region_ent->slave_dst))
 						break;
 				}
 			}
@@ -774,49 +788,40 @@ amdgpu_dirty_update(ScrnInfoPtr scrn)
 		}
 	}
 }
-#endif
+
 
 Bool
-amdgpu_scanout_do_update(xf86CrtcPtr xf86_crtc, int scanout_id)
+amdgpu_scanout_do_update(xf86CrtcPtr xf86_crtc, int scanout_id,
+			 PixmapPtr src_pix, BoxPtr extents)
 {
 	drmmode_crtc_private_ptr drmmode_crtc = xf86_crtc->driver_private;
-	RegionPtr pRegion = DamageRegion(drmmode_crtc->scanout_damage);
+	RegionRec region = { .extents = *extents, .data = NULL };
 	ScrnInfoPtr scrn = xf86_crtc->scrn;
 	ScreenPtr pScreen = scrn->pScreen;
 	DrawablePtr pDraw;
-	BoxRec extents;
 
 	if (!xf86_crtc->enabled ||
-	    !drmmode_crtc->scanout[scanout_id].pixmap)
-		return FALSE;
-
-	if (!RegionNotEmpty(pRegion))
+	    !drmmode_crtc->scanout[scanout_id].pixmap ||
+	    extents->x1 >= extents->x2 || extents->y1 >= extents->y2)
 		return FALSE;
 
 	pDraw = &drmmode_crtc->scanout[scanout_id].pixmap->drawable;
-	extents = *RegionExtents(pRegion);
-	if (!amdgpu_scanout_extents_intersect(xf86_crtc, &extents))
+	if (!amdgpu_scanout_extents_intersect(xf86_crtc, extents))
 		return FALSE;
 
 	if (drmmode_crtc->tear_free) {
-		amdgpu_sync_scanout_pixmaps(xf86_crtc, pRegion, scanout_id);
-		RegionCopy(&drmmode_crtc->scanout_last_region, pRegion);
+		amdgpu_sync_scanout_pixmaps(xf86_crtc, &region, scanout_id);
+		RegionCopy(&drmmode_crtc->scanout_last_region, &region);
 	}
-	RegionEmpty(pRegion);
 
-#if XF86_CRTC_VERSION >= 4
 	if (xf86_crtc->driverIsPerformingTransform) {
 		SourceValidateProcPtr SourceValidate = pScreen->SourceValidate;
 		PictFormatPtr format = PictureWindowFormat(pScreen->root);
 		int error;
 		PicturePtr src, dst;
-		XID include_inferiors = IncludeInferiors;
 
-		src = CreatePicture(None,
-				    &pScreen->root->drawable,
-				    format,
-				    CPSubwindowMode,
-				    &include_inferiors, serverClient, &error);
+		src = CreatePicture(None, &src_pix->drawable, format, 0L, NULL,
+				    serverClient, &error);
 		if (!src) {
 			ErrorF("Failed to create source picture for transformed scanout "
 			       "update\n");
@@ -843,9 +848,9 @@ amdgpu_scanout_do_update(xf86CrtcPtr xf86_crtc, int scanout_id)
 		pScreen->SourceValidate = NULL;
 		CompositePicture(PictOpSrc,
 				 src, NULL, dst,
-				 extents.x1, extents.y1, 0, 0, extents.x1,
-				 extents.y1, extents.x2 - extents.x1,
-				 extents.y2 - extents.y1);
+				 extents->x1, extents->y1, 0, 0, extents->x1,
+				 extents->y1, extents->x2 - extents->x1,
+				 extents->y2 - extents->y1);
 		pScreen->SourceValidate = SourceValidate;
 
  free_dst:
@@ -854,16 +859,14 @@ amdgpu_scanout_do_update(xf86CrtcPtr xf86_crtc, int scanout_id)
 		FreePicture(src, None);
 	} else
  out:
-#endif /* XF86_CRTC_VERSION >= 4 */
 	{
 		GCPtr gc = GetScratchGC(pDraw->depth, pScreen);
 
 		ValidateGC(pDraw, gc);
-		(*gc->ops->CopyArea)(&pScreen->GetScreenPixmap(pScreen)->drawable,
-				     pDraw, gc,
-				     xf86_crtc->x + extents.x1, xf86_crtc->y + extents.y1,
-				     extents.x2 - extents.x1, extents.y2 - extents.y1,
-				     extents.x1, extents.y1);
+		(*gc->ops->CopyArea)(&src_pix->drawable, pDraw, gc,
+				     xf86_crtc->x + extents->x1, xf86_crtc->y + extents->y1,
+				     extents->x2 - extents->x1, extents->y2 - extents->y1,
+				     extents->x1, extents->y1);
 		FreeScratchGC(gc);
 	}
 
@@ -884,7 +887,18 @@ static void
 amdgpu_scanout_update_handler(xf86CrtcPtr crtc, uint32_t frame, uint64_t usec,
 							  void *event_data)
 {
-	amdgpu_scanout_do_update(crtc, 0);
+	drmmode_crtc_private_ptr drmmode_crtc = event_data;
+	ScreenPtr screen = crtc->scrn->pScreen;
+	RegionPtr region = DamageRegion(drmmode_crtc->scanout_damage);
+
+	if (crtc->enabled &&
+	    !drmmode_crtc->flip_pending &&
+	    drmmode_crtc->dpms_mode == DPMSModeOn) {
+		if (amdgpu_scanout_do_update(crtc, drmmode_crtc->scanout_id,
+					     screen->GetWindowPixmap(screen->root),
+					     &region->extents))
+			RegionEmpty(region);
+	}
 
 	amdgpu_scanout_update_abort(crtc, event_data);
 }
@@ -895,16 +909,14 @@ amdgpu_scanout_update(xf86CrtcPtr xf86_crtc)
 	drmmode_crtc_private_ptr drmmode_crtc = xf86_crtc->driver_private;
 	uintptr_t drm_queue_seq;
 	ScrnInfoPtr scrn;
-	AMDGPUEntPtr pAMDGPUEnt;
-	drmVBlank vbl;
 	DamagePtr pDamage;
 	RegionPtr pRegion;
 	BoxRec extents;
 
 	if (!xf86_crtc->enabled ||
 	    drmmode_crtc->scanout_update_pending ||
-	    !drmmode_crtc->scanout[0].pixmap ||
-	    drmmode_crtc->pending_dpms_mode != DPMSModeOn)
+	    drmmode_crtc->flip_pending ||
+	    drmmode_crtc->dpms_mode != DPMSModeOn)
 		return;
 
 	pDamage = drmmode_crtc->scanout_damage;
@@ -934,14 +946,10 @@ amdgpu_scanout_update(xf86CrtcPtr xf86_crtc)
 		return;
 	}
 
-	pAMDGPUEnt = AMDGPUEntPriv(scrn);
-	vbl.request.type = DRM_VBLANK_RELATIVE | DRM_VBLANK_EVENT;
-	vbl.request.type |= amdgpu_populate_vbl_request_type(xf86_crtc);
-	vbl.request.sequence = 1;
-	vbl.request.signal = drm_queue_seq;
-	if (drmWaitVBlank(pAMDGPUEnt->fd, &vbl)) {
+	if (!drmmode_wait_vblank(xf86_crtc, DRM_VBLANK_RELATIVE | DRM_VBLANK_EVENT,
+				 1, drm_queue_seq, NULL, NULL)) {
 		xf86DrvMsg(scrn->scrnIndex, X_WARNING,
-			   "drmWaitVBlank failed for scanout update: %s\n",
+			   "drmmode_wait_vblank failed for scanout update: %s\n",
 			   strerror(errno));
 		amdgpu_drm_abort_entry(drm_queue_seq);
 		return;
@@ -951,36 +959,33 @@ amdgpu_scanout_update(xf86CrtcPtr xf86_crtc)
 }
 
 static void
-amdgpu_scanout_flip_abort(xf86CrtcPtr crtc, void *event_data)
-{
-	drmmode_crtc_private_ptr drmmode_crtc = event_data;
-
-	drmmode_crtc->scanout_update_pending = FALSE;
-	drmmode_clear_pending_flip(crtc);
-}
-
-static void
 amdgpu_scanout_flip(ScreenPtr pScreen, AMDGPUInfoPtr info,
 					xf86CrtcPtr xf86_crtc)
 {
 	drmmode_crtc_private_ptr drmmode_crtc = xf86_crtc->driver_private;
+	RegionPtr region = DamageRegion(drmmode_crtc->scanout_damage);
 	ScrnInfoPtr scrn = xf86_crtc->scrn;
 	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(scrn);
 	uintptr_t drm_queue_seq;
 	unsigned scanout_id;
 
 	if (drmmode_crtc->scanout_update_pending ||
-	    drmmode_crtc->pending_dpms_mode != DPMSModeOn)
+	    drmmode_crtc->flip_pending ||
+	    drmmode_crtc->dpms_mode != DPMSModeOn)
 		return;
 
 	scanout_id = drmmode_crtc->scanout_id ^ 1;
-	if (!amdgpu_scanout_do_update(xf86_crtc, scanout_id))
+	if (!amdgpu_scanout_do_update(xf86_crtc, scanout_id,
+				      pScreen->GetWindowPixmap(pScreen->root),
+				      &region->extents))
 		return;
+	RegionEmpty(region);
 
 	drm_queue_seq = amdgpu_drm_queue_alloc(xf86_crtc,
 					       AMDGPU_DRM_QUEUE_CLIENT_DEFAULT,
 					       AMDGPU_DRM_QUEUE_ID_DEFAULT,
-					       drmmode_crtc, NULL,
+					       NULL,
+					       amdgpu_scanout_flip_handler,
 					       amdgpu_scanout_flip_abort);
 	if (drm_queue_seq == AMDGPU_DRM_QUEUE_ERROR) {
 		xf86DrvMsg(scrn->scrnIndex, X_WARNING,
@@ -988,23 +993,38 @@ amdgpu_scanout_flip(ScreenPtr pScreen, AMDGPUInfoPtr info,
 		return;
 	}
 
+	drmmode_fb_reference(pAMDGPUEnt->fd, &drmmode_crtc->flip_pending,
+			     amdgpu_pixmap_get_fb(drmmode_crtc->scanout[scanout_id].pixmap));
+	if (!drmmode_crtc->flip_pending) {
+		xf86DrvMsg(scrn->scrnIndex, X_WARNING,
+			   "Failed to get FB for scanout flip.\n");
+		amdgpu_drm_abort_entry(drm_queue_seq);
+		return;
+	}
+
 	if (drmmode_page_flip_target_relative(pAMDGPUEnt, drmmode_crtc,
-					      drmmode_crtc->scanout[scanout_id].fb_id,
+					      drmmode_crtc->flip_pending->handle,
 					      0, drm_queue_seq, 0) != 0) {
-		xf86DrvMsg(scrn->scrnIndex, X_WARNING, "flip queue failed in %s: %s\n",
+		xf86DrvMsg(scrn->scrnIndex, X_WARNING, "flip queue failed in %s: %s, "
+			   "TearFree inactive until next modeset\n",
 			   __func__, strerror(errno));
 		amdgpu_drm_abort_entry(drm_queue_seq);
+		RegionCopy(DamageRegion(drmmode_crtc->scanout_damage),
+			   &drmmode_crtc->scanout_last_region);
+		RegionEmpty(&drmmode_crtc->scanout_last_region);
+		amdgpu_scanout_update(xf86_crtc);
+		drmmode_crtc_scanout_destroy(drmmode_crtc->drmmode,
+					     &drmmode_crtc->scanout[scanout_id]);
+		drmmode_crtc->tear_free = FALSE;
 		return;
 	}
 
 	drmmode_crtc->scanout_id = scanout_id;
 	drmmode_crtc->scanout_update_pending = TRUE;
-	drmmode_crtc->flip_pending = TRUE;
 }
 
 static void AMDGPUBlockHandler_KMS(BLOCKHANDLER_ARGS_DECL)
 {
-	SCREEN_PTR(arg);
 	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
 	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
 	xf86CrtcConfigPtr xf86_config = XF86_CRTC_CONFIG_PTR(pScrn);
@@ -1014,7 +1034,10 @@ static void AMDGPUBlockHandler_KMS(BLOCKHANDLER_ARGS_DECL)
 	(*pScreen->BlockHandler) (BLOCKHANDLER_ARGS);
 	pScreen->BlockHandler = AMDGPUBlockHandler_KMS;
 
-	if (!amdgpu_is_gpu_screen(pScreen))
+	if (!xf86ScreenToScrn(amdgpu_master_screen(pScreen))->vtSema)
+		return;
+
+	if (!pScreen->isGPU)
 	{
 		for (c = 0; c < xf86_config->num_crtc; c++) {
 			xf86CrtcPtr crtc = xf86_config->crtc[c];
@@ -1022,11 +1045,7 @@ static void AMDGPUBlockHandler_KMS(BLOCKHANDLER_ARGS_DECL)
 
 			if (drmmode_crtc->tear_free)
 				amdgpu_scanout_flip(pScreen, info, crtc);
-			else if (info->shadow_primary
-#if XF86_CRTC_VERSION >= 4
-				 || crtc->driverIsPerformingTransform
-#endif
-				)
+			else if (drmmode_crtc->scanout[drmmode_crtc->scanout_id].pixmap)
 				amdgpu_scanout_update(crtc);
 		}
 	}
@@ -1036,9 +1055,7 @@ static void AMDGPUBlockHandler_KMS(BLOCKHANDLER_ARGS_DECL)
 		amdgpu_glamor_flush(pScrn);
 #endif
 
-#ifdef AMDGPU_PIXMAP_SHARING
 	amdgpu_dirty_update(pScrn);
-#endif
 }
 
 /* This is called by AMDGPUPreInit to set up the default visual */
@@ -1142,19 +1159,22 @@ static Bool AMDGPUPreInitAccel_KMS(ScrnInfoPtr pScrn)
 
 		if (info->dri2.available)
 			info->gbm = gbm_create_device(pAMDGPUEnt->fd);
-		if (info->gbm == NULL)
-			info->dri2.available = FALSE;
 
-		if (use_glamor &&
-			amdgpu_glamor_pre_init(pScrn))
-			return TRUE;
-
-		if (info->dri2.available)
-			return TRUE;
+		if (info->gbm) {
+			if (!use_glamor ||
+			    amdgpu_glamor_pre_init(pScrn))
+				return TRUE;
+		} else {
+			xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
+				   "gbm_create_device returned NULL, using "
+				   "ShadowFB\n");
+		}
+	} else {
+		xf86DrvMsg(pScrn->scrnIndex, X_CONFIG,
+			   "GPU acceleration disabled, using ShadowFB\n");
 	}
 
-	xf86DrvMsg(pScrn->scrnIndex, X_INFO,
-		   "GPU accel disabled or not working, using shadowfb for KMS\n");
+	info->dri2.available = FALSE;
 	info->shadow_fb = TRUE;
 	if (!xf86LoadSubModule(pScrn, "shadow"))
 		info->shadow_fb = FALSE;
@@ -1208,7 +1228,6 @@ static Bool amdgpu_get_tile_config(AMDGPUInfoPtr info,
 
 static void AMDGPUSetupCapabilities(ScrnInfoPtr pScrn)
 {
-#ifdef AMDGPU_PIXMAP_SHARING
 	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
 	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(pScrn);
 	uint64_t value;
@@ -1230,7 +1249,6 @@ static void AMDGPUSetupCapabilities(ScrnInfoPtr pScrn)
 				pScrn->capabilities |= RR_Capability_SinkOutput;
 		}
 	}
-#endif
 }
 
 /* When the root window is created, initialize the screen contents from
@@ -1258,11 +1276,11 @@ static Bool AMDGPUCreateWindow_oneshot(WindowPtr pWin)
 }
 
 /* When the root window is mapped, set the initial modes */
-static void AMDGPUWindowExposures_oneshot(WindowPtr pWin, RegionPtr pRegion
+void AMDGPUWindowExposures_oneshot(WindowPtr pWin, RegionPtr pRegion
 #if XORG_VERSION_CURRENT < XORG_VERSION_NUMERIC(1,16,99,901,0)
-					  , RegionPtr pBSRegion
+				   , RegionPtr pBSRegion
 #endif
-	)
+				   )
 {
 	ScreenPtr pScreen = pWin->drawable.pScreen;
 	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
@@ -1398,7 +1416,7 @@ Bool AMDGPUPreInit_KMS(ScrnInfoPtr pScrn, int flags)
 			xf86DrvMsg(pScrn->scrnIndex, X_CONFIG, "ShadowPrimary enabled\n");
 	}
 
-	if (!amdgpu_is_gpu_scrn(pScrn)) {
+	if (!pScrn->is_gpu) {
 		sw_cursor = xf86ReturnOptValBool(info->Options,
 						 OPTION_SW_CURSOR, FALSE);
 
@@ -1575,6 +1593,30 @@ static void amdgpu_drop_drm_master(ScrnInfoPtr pScrn)
 }
 
 
+static
+CARD32 cleanup_black_fb(OsTimerPtr timer, CARD32 now, pointer data)
+{
+	ScreenPtr screen = data;
+	ScrnInfoPtr scrn = xf86ScreenToScrn(screen);
+	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(scrn);
+	xf86CrtcConfigPtr xf86_config = XF86_CRTC_CONFIG_PTR(scrn);
+	int c;
+
+	if (xf86ScreenToScrn(amdgpu_master_screen(screen))->vtSema)
+		return 0;
+
+	/* Unreference the all-black FB created by AMDGPULeaveVT_KMS. After
+	 * this, there should be no FB left created by this driver.
+	 */
+	for (c = 0; c < xf86_config->num_crtc; c++) {
+		drmmode_crtc_private_ptr drmmode_crtc =
+			xf86_config->crtc[c]->driver_private;
+
+		drmmode_fb_reference(pAMDGPUEnt->fd, &drmmode_crtc->fb, NULL);
+	}
+
+	return 0;
+}
 
 static Bool AMDGPUSaveScreen_KMS(ScreenPtr pScreen, int mode)
 {
@@ -1601,7 +1643,7 @@ static Bool AMDGPUSaveScreen_KMS(ScreenPtr pScreen, int mode)
  * text mode, unmap video memory, and unwrap and call the saved
  * CloseScreen function.
  */
-static Bool AMDGPUCloseScreen_KMS(CLOSE_SCREEN_ARGS_DECL)
+static Bool AMDGPUCloseScreen_KMS(ScreenPtr pScreen)
 {
 	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
 	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
@@ -1633,20 +1675,18 @@ static Bool AMDGPUCloseScreen_KMS(CLOSE_SCREEN_ARGS_DECL)
 	xf86ClearPrimInitDone(info->pEnt->index);
 	pScreen->BlockHandler = info->BlockHandler;
 	pScreen->CloseScreen = info->CloseScreen;
-	return (*pScreen->CloseScreen) (CLOSE_SCREEN_ARGS);
+	return pScreen->CloseScreen(pScreen);
 }
 
-void AMDGPUFreeScreen_KMS(FREE_SCREEN_ARGS_DECL)
+void AMDGPUFreeScreen_KMS(ScrnInfoPtr pScrn)
 {
-	SCRN_INFO_PTR(arg);
-
 	xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, AMDGPU_LOGLEVEL_DEBUG,
 		       "AMDGPUFreeScreen\n");
 
 	AMDGPUFreeRec(pScrn);
 }
 
-Bool AMDGPUScreenInit_KMS(SCREEN_INIT_ARGS_DECL)
+Bool AMDGPUScreenInit_KMS(ScreenPtr pScreen, int argc, char **argv)
 {
 	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
 	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
@@ -1740,8 +1780,11 @@ Bool AMDGPUScreenInit_KMS(SCREEN_INIT_ARGS_DECL)
 	}
 #endif
 
-	if (!amdgpu_is_gpu_screen(pScreen)) {
-		value = xorgGetVersion() >= XORG_VERSION_NUMERIC(1,18,3,0,0);
+	if (!pScreen->isGPU) {
+		if (xorgGetVersion() >= XORG_VERSION_NUMERIC(1,18,3,0,0))
+			value = info->use_glamor;
+		else
+			value = FALSE;
 		from = X_DEFAULT;
 
 		if (info->use_glamor) {
@@ -1796,7 +1839,7 @@ Bool AMDGPUScreenInit_KMS(SCREEN_INIT_ARGS_DECL)
 			xf86DrvMsg(pScrn->scrnIndex, X_INFO, "3D acceleration disabled\n");
 		xf86DrvMsg(pScrn->scrnIndex, X_INFO, "2D acceleration disabled\n");
 	} else {
-		xf86DrvMsg(pScrn->scrnIndex, X_INFO, "2D and 3D cceleration disabled\n");
+		xf86DrvMsg(pScrn->scrnIndex, X_INFO, "2D and 3D acceleration disabled\n");
 	}
 
 	/* Init DPMS */
@@ -1825,8 +1868,7 @@ Bool AMDGPUScreenInit_KMS(SCREEN_INIT_ARGS_DECL)
 	 */
 	/* xf86DiDGAInit(pScreen, info->LinearAddr + pScrn->fbOffset); */
 #endif
-	if (info->shadow_fb == FALSE &&
-	    !amdgpu_is_gpu_screen(pScreen)) {
+	if (info->shadow_fb == FALSE && !pScreen->isGPU) {
 		/* Init Xv */
 		xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, AMDGPU_LOGLEVEL_DEBUG,
 			       "Initializing Xv\n");
@@ -1842,7 +1884,7 @@ Bool AMDGPUScreenInit_KMS(SCREEN_INIT_ARGS_DECL)
 	}
 	pScrn->pScreen = pScreen;
 
-	if (!amdgpu_is_gpu_screen(pScreen)) {
+	if (!pScreen->isGPU) {
 		if (serverGeneration == 1 && bgNoneRoot && info->use_glamor) {
 			info->CreateWindow = pScreen->CreateWindow;
 			pScreen->CreateWindow = AMDGPUCreateWindow_oneshot;
@@ -1862,12 +1904,10 @@ Bool AMDGPUScreenInit_KMS(SCREEN_INIT_ARGS_DECL)
 	info->CreateScreenResources = pScreen->CreateScreenResources;
 	pScreen->CreateScreenResources = AMDGPUCreateScreenResources_KMS;
 
-#ifdef AMDGPU_PIXMAP_SHARING
 	pScreen->StartPixmapTracking = PixmapStartDirtyTracking;
 	pScreen->StopPixmapTracking = PixmapStopDirtyTracking;
 #if HAS_SYNC_SHARED_PIXMAP
 	pScreen->SyncSharedPixmap = amdgpu_sync_shared_pixmap;
-#endif
 #endif
 
 	if (!xf86CrtcScreenInit(pScreen))
@@ -1892,9 +1932,8 @@ Bool AMDGPUScreenInit_KMS(SCREEN_INIT_ARGS_DECL)
 	return TRUE;
 }
 
-Bool AMDGPUEnterVT_KMS(VT_FUNC_ARGS_DECL)
+Bool AMDGPUEnterVT_KMS(ScrnInfoPtr pScrn)
 {
-	SCRN_INFO_PTR(arg);
 	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
 
 	xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, AMDGPU_LOGLEVEL_DEBUG,
@@ -1910,36 +1949,119 @@ Bool AMDGPUEnterVT_KMS(VT_FUNC_ARGS_DECL)
 	return TRUE;
 }
 
-void AMDGPULeaveVT_KMS(VT_FUNC_ARGS_DECL)
+static void
+pixmap_unref_fb(void *value, XID id, void *cdata)
 {
-	SCRN_INFO_PTR(arg);
+	PixmapPtr pixmap = value;
+	AMDGPUEntPtr pAMDGPUEnt = cdata;
+	struct drmmode_fb **fb_ptr = amdgpu_pixmap_get_fb_ptr(pixmap);
+
+	if (fb_ptr)
+		drmmode_fb_reference(pAMDGPUEnt->fd, fb_ptr, NULL);
+}
+
+void AMDGPULeaveVT_KMS(ScrnInfoPtr pScrn)
+{
+	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
+	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(pScrn);
+	ScreenPtr pScreen = pScrn->pScreen;
+	xf86CrtcConfigPtr xf86_config = XF86_CRTC_CONFIG_PTR(pScrn);
+	struct drmmode_scanout black_scanout = { .pixmap = NULL, .bo = NULL };
+	xf86CrtcPtr crtc;
+	drmmode_crtc_private_ptr drmmode_crtc;
+	unsigned w = 0, h = 0;
+	int i;
 
 	xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, AMDGPU_LOGLEVEL_DEBUG,
 		       "AMDGPULeaveVT_KMS\n");
 
-	amdgpu_drop_drm_master(pScrn);
+	/* Compute maximum scanout dimensions of active CRTCs */
+	for (i = 0; i < xf86_config->num_crtc; i++) {
+		crtc = xf86_config->crtc[i];
+		drmmode_crtc = crtc->driver_private;
+
+		if (!drmmode_crtc->fb)
+			continue;
+
+		w = max(w, crtc->mode.HDisplay);
+		h = max(h, crtc->mode.VDisplay);
+	}
+
+	/* Make all active CRTCs scan out from an all-black framebuffer */
+	if (w > 0 && h > 0) {
+		if (drmmode_crtc_scanout_create(crtc, &black_scanout, w, h)) {
+			struct drmmode_fb *black_fb =
+				amdgpu_pixmap_get_fb(black_scanout.pixmap);
+
+			amdgpu_pixmap_clear(black_scanout.pixmap);
+			amdgpu_glamor_finish(pScrn);
+
+			for (i = 0; i < xf86_config->num_crtc; i++) {
+				crtc = xf86_config->crtc[i];
+				drmmode_crtc = crtc->driver_private;
+
+				if (drmmode_crtc->fb) {
+					if (black_fb) {
+						drmmode_set_mode(crtc, black_fb, &crtc->mode, 0, 0);
+					} else {
+						drmModeSetCrtc(pAMDGPUEnt->fd,
+							       drmmode_crtc->mode_crtc->crtc_id, 0, 0,
+							       0, NULL, 0, NULL);
+						drmmode_fb_reference(pAMDGPUEnt->fd, &drmmode_crtc->fb,
+								     NULL);
+					}
+
+					if (pScrn->is_gpu) {
+						if (drmmode_crtc->scanout[0].pixmap)
+							pixmap_unref_fb(drmmode_crtc->scanout[0].pixmap,
+									None, pAMDGPUEnt);
+						if (drmmode_crtc->scanout[1].pixmap)
+							pixmap_unref_fb(drmmode_crtc->scanout[1].pixmap,
+									None, pAMDGPUEnt);
+					} else {
+						drmmode_crtc_scanout_free(drmmode_crtc);
+					}
+				}
+			}
+		}
+	}
 
 	xf86RotateFreeShadow(pScrn);
-	drmmode_scanout_free(pScrn);
+	drmmode_crtc_scanout_destroy(&info->drmmode, &black_scanout);
+
+	/* Unreference FBs of all pixmaps. After this, the only FB remaining
+	 * should be the all-black one being scanned out by active CRTCs
+	 */
+	for (i = 0; i < currentMaxClients; i++) {
+		if (i > 0 &&
+		    (!clients[i] || clients[i]->clientState != ClientStateRunning))
+			continue;
+
+		FindClientResourcesByType(clients[i], RT_PIXMAP, pixmap_unref_fb,
+					  pAMDGPUEnt);
+	}
+	pixmap_unref_fb(pScreen->GetScreenPixmap(pScreen), None, pAMDGPUEnt);
+
+	TimerSet(NULL, 0, 1000, cleanup_black_fb, pScreen);
 
 	xf86_hide_cursors(pScrn);
+
+	amdgpu_drop_drm_master(pScrn);
 
 	xf86DrvMsgVerb(pScrn->scrnIndex, X_INFO, AMDGPU_LOGLEVEL_DEBUG,
 		       "Ok, leaving now...\n");
 }
 
-Bool AMDGPUSwitchMode_KMS(SWITCH_MODE_ARGS_DECL)
+Bool AMDGPUSwitchMode_KMS(ScrnInfoPtr pScrn, DisplayModePtr mode)
 {
-	SCRN_INFO_PTR(arg);
 	Bool ret;
 	ret = xf86SetSingleMode(pScrn, mode, RR_Rotate_0);
 	return ret;
 
 }
 
-void AMDGPUAdjustFrame_KMS(ADJUST_FRAME_ARGS_DECL)
+void AMDGPUAdjustFrame_KMS(ScrnInfoPtr pScrn, int x, int y)
 {
-	SCRN_INFO_PTR(arg);
 	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
 	drmmode_adjust_frame(pScrn, &info->drmmode, x, y);
 	return;
@@ -2034,7 +2156,7 @@ static Bool amdgpu_setup_kernel_mem(ScreenPtr pScreen)
 }
 
 /* Used to disallow modes that are not supported by the hardware */
-ModeStatus AMDGPUValidMode(SCRN_ARG_TYPE arg, DisplayModePtr mode,
+ModeStatus AMDGPUValidMode(ScrnInfoPtr pScrn, DisplayModePtr mode,
 			   Bool verbose, int flag)
 {
 	/* There are problems with double scan mode at high clocks

@@ -79,13 +79,8 @@ struct amdgpu_buffer *amdgpu_alloc_pixmap_bo(ScrnInfoPtr pScrn, int width,
 			bo_use |= GBM_BO_USE_SCANOUT;
 
 #ifdef HAVE_GBM_BO_USE_LINEAR
-#ifdef CREATE_PIXMAP_USAGE_SHARED
-		if (usage_hint == CREATE_PIXMAP_USAGE_SHARED) {
-			bo_use |= GBM_BO_USE_LINEAR;
-		}
-#endif
-
-		if (usage_hint & AMDGPU_CREATE_PIXMAP_LINEAR) {
+		if (usage_hint == CREATE_PIXMAP_USAGE_SHARED ||
+		    (usage_hint & AMDGPU_CREATE_PIXMAP_LINEAR)) {
 			bo_use |= GBM_BO_USE_LINEAR;
 		}
 #endif
@@ -118,6 +113,26 @@ struct amdgpu_buffer *amdgpu_alloc_pixmap_bo(ScrnInfoPtr pScrn, int width,
 	}
 
 	return pixmap_buffer;
+}
+
+/* Clear the pixmap contents to black */
+void
+amdgpu_pixmap_clear(PixmapPtr pixmap)
+{
+	ScreenPtr screen = pixmap->drawable.pScreen;
+	AMDGPUInfoPtr info = AMDGPUPTR(xf86ScreenToScrn(screen));
+	GCPtr gc = GetScratchGC(pixmap->drawable.depth, screen);
+	xRectangle rect;
+
+	ValidateGC(&pixmap->drawable, gc);
+	rect.x = 0;
+	rect.y = 0;
+	rect.width = pixmap->drawable.width;
+	rect.height = pixmap->drawable.height;
+	info->force_accel = TRUE;
+	gc->ops->PolyFillRect(&pixmap->drawable, gc, 1, &rect);
+	info->force_accel = FALSE;
+	FreeScratchGC(gc);
 }
 
 Bool amdgpu_bo_get_handle(struct amdgpu_buffer *bo, uint32_t *handle)
@@ -374,7 +389,6 @@ struct amdgpu_buffer *amdgpu_gem_bo_open_prime(amdgpu_device_handle pDev,
 	return bo;
 }
 
-#ifdef AMDGPU_PIXMAP_SHARING
 
 Bool amdgpu_set_shared_pixmap_backing(PixmapPtr ppix, void *fd_handle)
 {
@@ -447,5 +461,3 @@ Bool amdgpu_set_shared_pixmap_backing(PixmapPtr ppix, void *fd_handle)
 
 	return ret;
 }
-
-#endif /* AMDGPU_PIXMAP_SHARING */
