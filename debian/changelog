@@ -1,6 +1,7 @@
 xserver-xorg-video-amdgpu (1.4.0-1) UNRELEASED; urgency=medium
 
   * New upstream release.
+  * control: Bump libdrm-dev build-dep to 2.4.78 to match configure.ac.
 
  -- Timo Aaltonen <tjaalton@debian.org>  Thu, 28 Sep 2017 17:17:55 +0300
 

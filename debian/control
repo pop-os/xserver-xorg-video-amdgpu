@@ -7,7 +7,7 @@ Build-Depends:
  debhelper (>= 9),
  dh-autoreconf,
  quilt,
- libdrm-dev (>= 2.4.72) [!hurd-i386],
+ libdrm-dev (>= 2.4.78) [!hurd-i386],
  libgl1-mesa-dev | libgl-dev,
  libgbm-dev,
  libudev-dev [linux-any],
