@@ -1624,6 +1624,7 @@ CARD32 cleanup_black_fb(OsTimerPtr timer, CARD32 now, pointer data)
 		drmmode_fb_reference(pAMDGPUEnt->fd, &drmmode_crtc->fb, NULL);
 	}
 
+	TimerFree(timer);
 	return 0;
 }
 
