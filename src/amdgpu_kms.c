@@ -1174,11 +1174,11 @@ static Bool AMDGPUPreInitAccel_KMS(ScrnInfoPtr pScrn)
 			   "GPU acceleration disabled, using ShadowFB\n");
 	}
 
+	if (!xf86LoadSubModule(pScrn, "shadow"))
+		return FALSE;
+
 	info->dri2.available = FALSE;
 	info->shadow_fb = TRUE;
-	if (!xf86LoadSubModule(pScrn, "shadow"))
-		info->shadow_fb = FALSE;
-
 	return TRUE;
 }
 
@@ -1727,7 +1727,7 @@ Bool AMDGPUScreenInit_KMS(ScreenPtr pScreen, int argc, char **argv)
 		if (info->fb_shadow == NULL) {
 			xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
 				   "Failed to allocate shadow framebuffer\n");
-			info->shadow_fb = FALSE;
+			return FALSE;
 		} else {
 			if (!fbScreenInit(pScreen, info->fb_shadow,
 					  pScrn->virtualX, pScrn->virtualY,
