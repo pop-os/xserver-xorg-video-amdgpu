@@ -116,16 +116,24 @@ static void AMDGPUFreeRec(ScrnInfoPtr pScrn)
 	DevUnion *pPriv;
 	AMDGPUEntPtr pAMDGPUEnt;
 	AMDGPUInfoPtr info;
+	EntityInfoPtr pEnt;
 
 	if (!pScrn)
 		return;
 
 	info = AMDGPUPTR(pScrn);
-	if (info && info->fbcon_pixmap)
-		pScrn->pScreen->DestroyPixmap(info->fbcon_pixmap);
+	if (info) {
+		if (info->fbcon_pixmap)
+			pScrn->pScreen->DestroyPixmap(info->fbcon_pixmap);
 
-	pPriv = xf86GetEntityPrivate(xf86GetEntityInfo(pScrn->entityList[pScrn->numEntities - 1])->index,
-				     gAMDGPUEntityIndex);
+		pEnt = info->pEnt;
+		free(pScrn->driverPrivate);
+		pScrn->driverPrivate = NULL;
+	} else {
+		pEnt = xf86GetEntityInfo(pScrn->entityList[pScrn->numEntities - 1]);
+	}
+
+	pPriv = xf86GetEntityPrivate(pEnt->index, gAMDGPUEntityIndex);
 	pAMDGPUEnt = pPriv->ptr;
 	if (pAMDGPUEnt->fd > 0) {
 		DevUnion *pPriv;
@@ -143,8 +151,7 @@ static void AMDGPUFreeRec(ScrnInfoPtr pScrn)
 		}
 	}
 
-	free(pScrn->driverPrivate);
-	pScrn->driverPrivate = NULL;
+	free(pEnt);
 }
 
 static void *amdgpuShadowWindow(ScreenPtr screen, CARD32 row, CARD32 offset,
