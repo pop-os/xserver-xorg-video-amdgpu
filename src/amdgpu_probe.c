@@ -227,7 +227,7 @@ static Bool amdgpu_get_scrninfo(int entity_num, struct pci_device *pci_dev)
 
 		pAMDGPUEnt = pPriv->ptr;
 		if (!amdgpu_open_drm_master(pScrn, pAMDGPUEnt, busid))
-			goto error_fd;
+			goto error;
 
 		pAMDGPUEnt->fd_ref = 1;
 
@@ -255,8 +255,6 @@ static Bool amdgpu_get_scrninfo(int entity_num, struct pci_device *pci_dev)
 
 error_amdgpu:
 	amdgpu_kernel_close_fd(pAMDGPUEnt);
-error_fd:
-	free(pPriv->ptr);
 error:
 	free(busid);
 	return FALSE;
@@ -352,7 +350,7 @@ amdgpu_platform_probe(DriverPtr pDriver,
 		pAMDGPUEnt->platform_dev = dev;
 		pAMDGPUEnt->fd = amdgpu_kernel_open_fd(pScrn, busid, dev);
 		if (pAMDGPUEnt->fd < 0)
-			goto error_fd;
+			goto error;
 
 		pAMDGPUEnt->fd_ref = 1;
 
@@ -380,8 +378,6 @@ amdgpu_platform_probe(DriverPtr pDriver,
 
 error_amdgpu:
 	amdgpu_kernel_close_fd(pAMDGPUEnt);
-error_fd:
-	free(pPriv->ptr);
 error:
 	free(busid);
 	return FALSE;
