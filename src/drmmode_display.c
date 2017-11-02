@@ -858,8 +858,11 @@ drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 		if (drmmode_crtc->tear_free)
 			scanout_id = drmmode_crtc->scanout_id;
 
-		drmmode_crtc_gamma_do_set(crtc, crtc->gamma_red, crtc->gamma_green,
-					  crtc->gamma_blue, crtc->gamma_size);
+		/* gamma is disabled in kernel driver for deep color */
+		if (pScrn->depth != 30)
+			drmmode_crtc_gamma_do_set(
+				crtc, crtc->gamma_red, crtc->gamma_green,
+				crtc->gamma_blue, crtc->gamma_size);
 
 		if (drmmode_crtc->prime_scanout_pixmap) {
 			drmmode_crtc_prime_scanout_update(crtc, mode, scanout_id,
@@ -2361,6 +2364,12 @@ Bool drmmode_pre_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode, int cpp)
 		info->drmmode_crtc_funcs.shadow_destroy = NULL;
 	}
 
+	/* Hw gamma lut's are currently bypassed by the hw at color depth 30,
+	 * so spare the server the effort to compute and update the cluts.
+	 */
+	if (pScrn->depth == 30)
+		info->drmmode_crtc_funcs.gamma_set = NULL;
+
 	for (i = 0; i < mode_res->count_crtcs; i++)
 		if (!xf86IsEntityShared(pScrn->entityList[0]) ||
 		    (crtcs_needed && !(pAMDGPUEnt->assigned_crtcs & (1 << i))))
@@ -2591,8 +2600,9 @@ Bool drmmode_setup_colormap(ScreenPtr pScreen, ScrnInfoPtr pScrn)
 			       "Initializing kms color map\n");
 		if (!miCreateDefColormap(pScreen))
 			return FALSE;
-		/* all amdgpus support 10 bit CLUTs */
-		if (!xf86HandleColormaps(pScreen, 256, 10,
+		/* All radeons support 10 bit CLUTs. They get bypassed at depth 30. */
+		if (pScrn->depth != 30 &&
+		    !xf86HandleColormaps(pScreen, 256, 10,
 					 NULL, NULL,
 					 CMAP_PALETTED_TRUECOLOR
 #if 0				/* This option messes up text mode! (eich@suse.de) */
