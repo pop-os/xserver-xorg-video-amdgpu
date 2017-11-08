@@ -479,7 +479,11 @@ dirty_region(PixmapDirtyUpdatePtr dirty)
 static void
 redisplay_dirty(PixmapDirtyUpdatePtr dirty, RegionPtr region)
 {
-	ScrnInfoPtr scrn = xf86ScreenToScrn(dirty->slave_dst->drawable.pScreen);
+#ifdef HAS_DIRTYTRACKING_DRAWABLE_SRC
+	ScrnInfoPtr src_scrn = xf86ScreenToScrn(dirty->src->pScreen);
+#else
+	ScrnInfoPtr src_scrn = xf86ScreenToScrn(dirty->src->drawable.pScreen);
+#endif
 
 	if (RegionNil(region))
 		goto out;
@@ -493,7 +497,7 @@ redisplay_dirty(PixmapDirtyUpdatePtr dirty, RegionPtr region)
 	PixmapSyncDirtyHelper(dirty, region);
 #endif
 
-	amdgpu_glamor_flush(scrn);
+	amdgpu_glamor_flush(src_scrn);
 	if (dirty->slave_dst->master_pixmap)
 		DamageRegionProcessPending(&dirty->slave_dst->drawable);
 
