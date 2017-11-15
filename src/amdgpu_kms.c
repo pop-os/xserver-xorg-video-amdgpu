@@ -479,11 +479,8 @@ dirty_region(PixmapDirtyUpdatePtr dirty)
 static void
 redisplay_dirty(PixmapDirtyUpdatePtr dirty, RegionPtr region)
 {
-#ifdef HAS_DIRTYTRACKING_DRAWABLE_SRC
-	ScrnInfoPtr src_scrn = xf86ScreenToScrn(dirty->src->pScreen);
-#else
-	ScrnInfoPtr src_scrn = xf86ScreenToScrn(dirty->src->drawable.pScreen);
-#endif
+	ScrnInfoPtr src_scrn =
+		xf86ScreenToScrn(amdgpu_dirty_src_drawable(dirty)->pScreen);
 
 	if (RegionNil(region))
 		goto out;
