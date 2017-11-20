@@ -1378,8 +1378,10 @@ static xf86OutputStatus drmmode_output_detect(xf86OutputPtr output)
 
 	drmmode_output->mode_output =
 	    drmModeGetConnector(pAMDGPUEnt->fd, drmmode_output->output_id);
-	if (!drmmode_output->mode_output)
+	if (!drmmode_output->mode_output) {
+		drmmode_output->output_id = -1;
 		return XF86OutputStatusDisconnected;
+	}
 
 	switch (drmmode_output->mode_output->connection) {
 	case DRM_MODE_CONNECTED:
