@@ -234,6 +234,13 @@ struct amdgpu_client_priv {
 	uint_fast32_t needs_flush;
 };
 
+struct amdgpu_device_priv {
+	CursorPtr cursor;
+	Bool sprite_visible;
+};
+
+extern DevScreenPrivateKeyRec amdgpu_device_private_key;
+
 typedef struct {
 	EntityInfoPtr pEnt;
 	struct pci_device *PciInfo;
@@ -274,6 +281,12 @@ typedef struct {
 	CreateScreenResourcesProcPtr CreateScreenResources;
 	CreateWindowProcPtr CreateWindow;
 	WindowExposuresProcPtr WindowExposures;
+	void (*SetCursor) (DeviceIntPtr pDev, ScreenPtr pScreen,
+			   CursorPtr pCursor, int x, int y);
+	void (*MoveCursor) (DeviceIntPtr pDev, ScreenPtr pScreen, int x, int y);
+
+	/* Number of SW cursors currently visible on this screen */
+	int sprites_visible;
 
 	Bool IsSecondary;
 

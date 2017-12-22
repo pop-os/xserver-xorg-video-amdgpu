@@ -34,6 +34,7 @@
 #include <time.h>
 #include "cursorstr.h"
 #include "damagestr.h"
+#include "inputstr.h"
 #include "list.h"
 #include "micmap.h"
 #include "xf86cmap.h"
@@ -2429,6 +2430,57 @@ void drmmode_fini(ScrnInfoPtr pScrn, drmmode_ptr drmmode)
 
 	for (c = 0; c < config->num_crtc; c++)
 		drmmode_crtc_scanout_free(config->crtc[c]->driver_private);
+}
+
+static void drmmode_sprite_do_set_cursor(struct amdgpu_device_priv *device_priv,
+					 ScrnInfoPtr scrn, int x, int y)
+{
+	AMDGPUInfoPtr info = AMDGPUPTR(scrn);
+	CursorPtr cursor = device_priv->cursor;
+	Bool sprite_visible = device_priv->sprite_visible;
+
+	if (cursor) {
+		x -= cursor->bits->xhot;
+		y -= cursor->bits->yhot;
+
+		device_priv->sprite_visible =
+			x < scrn->virtualX && y < scrn->virtualY &&
+			(x + cursor->bits->width > 0) &&
+			(y + cursor->bits->height > 0);
+	} else {
+		device_priv->sprite_visible = FALSE;
+	}
+
+	info->sprites_visible += device_priv->sprite_visible - sprite_visible;
+}
+
+void drmmode_sprite_set_cursor(DeviceIntPtr pDev, ScreenPtr pScreen,
+			       CursorPtr pCursor, int x, int y)
+{
+	ScrnInfoPtr scrn = xf86ScreenToScrn(pScreen);
+	AMDGPUInfoPtr info = AMDGPUPTR(scrn);
+	struct amdgpu_device_priv *device_priv =
+		dixLookupScreenPrivate(&pDev->devPrivates,
+				       &amdgpu_device_private_key, pScreen);
+
+	device_priv->cursor = pCursor;
+	drmmode_sprite_do_set_cursor(device_priv, scrn, x, y);
+
+	info->SetCursor(pDev, pScreen, pCursor, x, y);
+}
+
+void drmmode_sprite_move_cursor(DeviceIntPtr pDev, ScreenPtr pScreen, int x,
+				int y)
+{
+	ScrnInfoPtr scrn = xf86ScreenToScrn(pScreen);
+	AMDGPUInfoPtr info = AMDGPUPTR(scrn);
+	struct amdgpu_device_priv *device_priv =
+		dixLookupScreenPrivate(&pDev->devPrivates,
+				       &amdgpu_device_private_key, pScreen);
+
+	drmmode_sprite_do_set_cursor(device_priv, scrn, x, y);
+
+	info->MoveCursor(pDev, pScreen, x, y);
 }
 
 void drmmode_set_cursor(ScrnInfoPtr scrn, drmmode_ptr drmmode, int id,

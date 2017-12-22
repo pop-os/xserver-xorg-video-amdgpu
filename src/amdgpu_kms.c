@@ -37,6 +37,7 @@
 #include "amdgpu_glamor.h"
 #include "amdgpu_probe.h"
 #include "micmap.h"
+#include "mipointrst.h"
 
 #include "amdgpu_version.h"
 #include "shadow.h"
@@ -62,6 +63,7 @@
 #include <gbm.h>
 
 static DevScreenPrivateKeyRec amdgpu_client_private_key;
+DevScreenPrivateKeyRec amdgpu_device_private_key;
 
 static Bool amdgpu_setup_kernel_mem(ScreenPtr pScreen);
 
@@ -1532,6 +1534,23 @@ static Bool AMDGPUCursorInit_KMS(ScreenPtr pScreen)
 	/* Cursor setup */
 	miDCInitialize(pScreen, xf86GetPointerScreenFuncs());
 
+	if (info->allowPageFlip) {
+		miPointerScreenPtr PointPriv =
+			dixLookupPrivate(&pScreen->devPrivates, miPointerScreenKey);
+
+		if (!dixRegisterScreenPrivateKey(&amdgpu_device_private_key, pScreen,
+						 PRIVATE_DEVICE,
+						 sizeof(struct amdgpu_device_priv))) {
+			xf86DrvMsg(pScrn->scrnIndex, X_ERROR, "dixRegisterScreenPrivateKey failed\n");
+			return FALSE;
+		}
+
+		info->SetCursor = PointPriv->spriteFuncs->SetCursor;
+		info->MoveCursor = PointPriv->spriteFuncs->MoveCursor;
+		PointPriv->spriteFuncs->SetCursor = drmmode_sprite_set_cursor;
+		PointPriv->spriteFuncs->MoveCursor = drmmode_sprite_move_cursor;
+	}
+
 	if (xf86ReturnOptValBool(info->Options, OPTION_SW_CURSOR, FALSE))
 		return TRUE;
 
@@ -1701,6 +1720,15 @@ static Bool AMDGPUCloseScreen_KMS(ScreenPtr pScreen)
 	amdgpu_glamor_fini(pScreen);
 	pScrn->vtSema = FALSE;
 	xf86ClearPrimInitDone(info->pEnt->index);
+
+	if (info->allowPageFlip) {
+		miPointerScreenPtr PointPriv =
+			dixLookupPrivate(&pScreen->devPrivates, miPointerScreenKey);
+
+		PointPriv->spriteFuncs->SetCursor = info->SetCursor;
+		PointPriv->spriteFuncs->MoveCursor = info->MoveCursor;
+	}
+
 	pScreen->BlockHandler = info->BlockHandler;
 	pScreen->CloseScreen = info->CloseScreen;
 	return pScreen->CloseScreen(pScreen);
