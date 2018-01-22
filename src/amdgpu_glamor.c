@@ -323,13 +323,21 @@ amdgpu_glamor_share_pixmap_backing(PixmapPtr pixmap, ScreenPtr slave,
 				   void **handle_p)
 {
 	ScreenPtr screen = pixmap->drawable.pScreen;
+	AMDGPUInfoPtr info = AMDGPUPTR(xf86ScreenToScrn(screen));
 	uint64_t tiling_info;
 	CARD16 stride;
 	CARD32 size;
+	Bool is_linear;
 	int fd;
 
 	tiling_info = amdgpu_pixmap_get_tiling_info(pixmap);
-	if (AMDGPU_TILING_GET(tiling_info, ARRAY_MODE) != 0) {
+
+	if (info->family >= AMDGPU_FAMILY_AI)
+		is_linear = AMDGPU_TILING_GET(tiling_info, SWIZZLE_MODE) == 0;
+	else
+		is_linear = AMDGPU_TILING_GET(tiling_info, ARRAY_MODE) == 1;
+
+	if (!is_linear) {
 		PixmapPtr linear;
 
 		/* We don't want to re-allocate the screen pixmap as
