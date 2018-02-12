@@ -2595,6 +2595,9 @@ drmmode_output_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode, drmModeResPtr mode_r
 	drmModeEncoderPtr *kencoders = NULL;
 	drmmode_output_private_ptr drmmode_output;
 	drmModePropertyBlobPtr path_blob = NULL;
+#if XF86_CRTC_VERSION >= 8
+	Bool nonDesktop = FALSE;
+#endif
 	char name[32];
 	int i;
 	const char *s;
@@ -2606,6 +2609,13 @@ drmmode_output_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode, drmModeResPtr mode_r
 		return 0;
 
 	path_blob = koutput_get_prop_blob(pAMDGPUEnt->fd, koutput, "PATH");
+
+#if XF86_CRTC_VERSION >= 8
+	i = koutput_get_prop_idx(pAMDGPUEnt->fd, koutput, DRM_MODE_PROP_RANGE,
+				 RR_PROPERTY_NON_DESKTOP);
+	if (i >= 0)
+        	nonDesktop = koutput->prop_values[i] != 0;
+#endif
 
 	kencoders = calloc(sizeof(drmModeEncoderPtr), koutput->count_encoders);
 	if (!kencoders) {
@@ -2638,6 +2648,9 @@ drmmode_output_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode, drmModeResPtr mode_r
 			drmmode_output = output->driver_private;
 			drmmode_output->output_id = mode_res->connectors[num];
 			drmmode_output->mode_output = koutput;
+#if XF86_CRTC_VERSION >= 8
+			output->non_desktop = nonDesktop;
+#endif
 			for (i = 0; i < koutput->count_encoders; i++) {
 				drmModeFreeEncoder(kencoders[i]);
 			}
@@ -2681,6 +2694,9 @@ drmmode_output_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode, drmModeResPtr mode_r
 	output->interlaceAllowed = TRUE;
 	output->doubleScanAllowed = TRUE;
 	output->driver_private = drmmode_output;
+#if XF86_CRTC_VERSION >= 8
+	output->non_desktop = nonDesktop;
+#endif
 
 	output->possible_crtcs = 0xffffffff;
 	for (i = 0; i < koutput->count_encoders; i++) {
