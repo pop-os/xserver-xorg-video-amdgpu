@@ -340,6 +340,7 @@ typedef struct {
 		SetSharedPixmapBackingProcPtr SavedSetSharedPixmapBacking;
 	} glamor;
 
+	xf86CrtcFuncsRec drmmode_crtc_funcs;
 } AMDGPUInfoRec, *AMDGPUInfoPtr;
 
 
