@@ -885,9 +885,8 @@ drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 			union gbm_bo_handle bo_handle;
 
 			bo_handle = gbm_bo_get_handle(info->front_buffer->bo.gbm);
-			fb = amdgpu_fb_create(pAMDGPUEnt->fd, pScrn->virtualX,
-					      pScrn->virtualY, pScrn->depth,
-					      pScrn->bitsPerPixel,
+			fb = amdgpu_fb_create(pScrn, pAMDGPUEnt->fd,
+					      pScrn->virtualX, pScrn->virtualY,
 					      pScrn->displayWidth * info->pixel_bytes,
 					      bo_handle.u32);
 			/* Prevent refcnt of ad-hoc FBs from reaching 2 */
