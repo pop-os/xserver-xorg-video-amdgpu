@@ -137,7 +137,7 @@ static void AMDGPUFreeRec(ScrnInfoPtr pScrn)
 
 	pPriv = xf86GetEntityPrivate(pEnt->index, gAMDGPUEntityIndex);
 	pAMDGPUEnt = pPriv->ptr;
-	if (pAMDGPUEnt->fd > 0) {
+	if (pAMDGPUEnt && pAMDGPUEnt->fd > 0) {
 		DevUnion *pPriv;
 		AMDGPUEntPtr pAMDGPUEnt;
 		pPriv = xf86GetEntityPrivate(pScrn->entityList[0],
