@@ -1352,7 +1352,7 @@ Bool AMDGPUPreInit_KMS(ScrnInfoPtr pScrn, int flags)
 	    && info->pEnt->location.type != BUS_PLATFORM
 #endif
 	    )
-		goto fail;
+		return FALSE;
 
 	pPriv = xf86GetEntityPrivate(pScrn->entityList[0],
 				     getAMDGPUEntityIndex());
@@ -1375,23 +1375,23 @@ Bool AMDGPUPreInit_KMS(ScrnInfoPtr pScrn, int flags)
 	pScrn->monitor = pScrn->confScreen->monitor;
 
 	if (!AMDGPUPreInitVisual(pScrn))
-		goto fail;
+		return FALSE;
 
 	xf86CollectOptions(pScrn, NULL);
 	if (!(info->Options = malloc(sizeof(AMDGPUOptions_KMS))))
-		goto fail;
+		return FALSE;
 
 	memcpy(info->Options, AMDGPUOptions_KMS, sizeof(AMDGPUOptions_KMS));
 	xf86ProcessOptions(pScrn->scrnIndex, pScrn->options, info->Options);
 
 	if (!AMDGPUPreInitWeight(pScrn))
-		goto fail;
+		return FALSE;
 
 	memset(&gpu_info, 0, sizeof(gpu_info));
 	amdgpu_query_gpu_info(pAMDGPUEnt->pDev, &gpu_info);
 
 	if (!AMDGPUPreInitChipType_KMS(pScrn, &gpu_info))
-		goto fail;
+		return FALSE;
 
 	info->dri2.available = FALSE;
 	info->dri2.enabled = FALSE;
@@ -1399,7 +1399,7 @@ Bool AMDGPUPreInit_KMS(ScrnInfoPtr pScrn, int flags)
 	if (info->dri2.pKernelDRMVersion == NULL) {
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
 			   "AMDGPUDRIGetVersion failed to get the DRM version\n");
-		goto fail;
+		return FALSE;
 	}
 
 	/* Get ScreenInit function */
@@ -1407,7 +1407,7 @@ Bool AMDGPUPreInit_KMS(ScrnInfoPtr pScrn, int flags)
 		return FALSE;
 
 	if (!AMDGPUPreInitAccel_KMS(pScrn))
-		goto fail;
+		return FALSE;
 
 	amdgpu_drm_queue_init();
 
@@ -1466,7 +1466,7 @@ Bool AMDGPUPreInit_KMS(ScrnInfoPtr pScrn, int flags)
 	    FALSE) {
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
 			   "Kernel modesetting setup failed\n");
-		goto fail;
+		return FALSE;
 	}
 
 	AMDGPUSetupCapabilities(pScrn);
@@ -1518,14 +1518,10 @@ Bool AMDGPUPreInit_KMS(ScrnInfoPtr pScrn, int flags)
 #endif
 	    ) {
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR, "No modes.\n");
-		goto fail;
+		return FALSE;
 	}
 
 	return TRUE;
-fail:
-	AMDGPUFreeRec(pScrn);
-	return FALSE;
-
 }
 
 static Bool AMDGPUCursorInit_KMS(ScreenPtr pScreen)
