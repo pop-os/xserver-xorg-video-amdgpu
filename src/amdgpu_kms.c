@@ -1083,14 +1083,7 @@ static Bool AMDGPUPreInitVisual(ScrnInfoPtr pScrn)
 	case 15:
 	case 16:
 	case 24:
-		break;
-
 	case 30:
-		if (xorgGetVersion() < XORG_VERSION_NUMERIC(1,19,99,1,0)) {
-			xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-				   "Depth 30 requires Xorg >= 1.19.99.1\n");
-			return FALSE;
-		}
 		break;
 
 	default:
@@ -1173,6 +1166,14 @@ static Bool AMDGPUPreInitAccel_KMS(ScrnInfoPtr pScrn)
 			use_glamor = FALSE;
 #endif
 
+		if (pScrn->depth == 30 && use_glamor &&
+		    xorgGetVersion() < XORG_VERSION_NUMERIC(1,19,99,1,0)) {
+			xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
+				   "Depth 30 is not supported by GLAMOR with "
+				   "Xorg < 1.19.99.1\n");
+			goto shadowfb;
+		}
+
 #ifdef DRI2
 		info->dri2.available = ! !xf86LoadSubModule(pScrn, "dri2");
 #endif
@@ -1190,6 +1191,7 @@ static Bool AMDGPUPreInitAccel_KMS(ScrnInfoPtr pScrn)
 				   "ShadowFB\n");
 		}
 	} else {
+shadowfb:
 		xf86DrvMsg(pScrn->scrnIndex, X_CONFIG,
 			   "GPU acceleration disabled, using ShadowFB\n");
 	}
