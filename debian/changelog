@@ -1,6 +1,7 @@
 xserver-xorg-video-amdgpu (18.0.0-1) UNRELEASED; urgency=medium
 
   * New upstream release.
+  * control: Update VCS urls.
 
  -- Timo Aaltonen <tjaalton@debian.org>  Wed, 07 Mar 2018 04:37:26 +0200
 
