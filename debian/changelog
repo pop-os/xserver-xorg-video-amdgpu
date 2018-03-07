@@ -1,10 +1,10 @@
-xserver-xorg-video-amdgpu (18.0.0-1) UNRELEASED; urgency=medium
+xserver-xorg-video-amdgpu (18.0.0-1) unstable; urgency=medium
 
   * New upstream release.
   * control: Update VCS urls.
   * control: Bump policy to 4.1.3, no changes.
 
- -- Timo Aaltonen <tjaalton@debian.org>  Wed, 07 Mar 2018 04:37:26 +0200
+ -- Timo Aaltonen <tjaalton@debian.org>  Wed, 07 Mar 2018 04:44:35 +0200
 
 xserver-xorg-video-amdgpu (1.4.0-1) unstable; urgency=medium
 
