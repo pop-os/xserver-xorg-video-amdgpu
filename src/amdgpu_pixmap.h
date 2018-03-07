@@ -104,8 +104,8 @@ static inline struct amdgpu_buffer *amdgpu_get_pixmap_bo(PixmapPtr pPix)
 }
 
 static inline struct drmmode_fb*
-amdgpu_fb_create(int drm_fd, uint32_t width, uint32_t height, uint8_t depth,
-		 uint8_t bpp, uint32_t pitch, uint32_t handle)
+amdgpu_fb_create(ScrnInfoPtr scrn, int drm_fd, uint32_t width, uint32_t height,
+		 uint32_t pitch, uint32_t handle)
 {
 	struct drmmode_fb *fb  = malloc(sizeof(*fb));
 
@@ -113,8 +113,8 @@ amdgpu_fb_create(int drm_fd, uint32_t width, uint32_t height, uint8_t depth,
 		return NULL;
 
 	fb->refcnt = 1;
-	if (drmModeAddFB(drm_fd, width, height, depth, bpp, pitch, handle,
-			 &fb->handle) == 0)
+	if (drmModeAddFB(drm_fd, width, height, scrn->depth, scrn->bitsPerPixel,
+			 pitch, handle, &fb->handle) == 0)
 		return fb;
 
 	free(fb);
@@ -154,9 +154,8 @@ amdgpu_pixmap_get_fb(PixmapPtr pix)
 			ScrnInfoPtr scrn = xf86ScreenToScrn(pix->drawable.pScreen);
 			AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(scrn);
 
-			*fb_ptr = amdgpu_fb_create(pAMDGPUEnt->fd, pix->drawable.width,
-						   pix->drawable.height, pix->drawable.depth,
-						   pix->drawable.bitsPerPixel, pix->devKind,
+			*fb_ptr = amdgpu_fb_create(scrn, pAMDGPUEnt->fd, pix->drawable.width,
+						   pix->drawable.height, pix->devKind,
 						   handle);
 		}
 	}

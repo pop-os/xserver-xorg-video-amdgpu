@@ -23,7 +23,7 @@
 # Initialize Autoconf
 AC_PREREQ([2.60])
 AC_INIT([xf86-video-amdgpu],
-        [1.4.0],
+        [18.0.0],
         [https://bugs.freedesktop.org/enter_bug.cgi?product=xorg&component=Driver/AMDgpu],
         [xf86-video-amdgpu])
 
@@ -71,7 +71,7 @@ XORG_DRIVER_CHECK_EXT(DPMSExtension, xextproto)
 
 # Checks for libraries.
 PKG_CHECK_MODULES(LIBDRM, [libdrm >= 2.4.78])
-PKG_CHECK_MODULES(LIBDRM_AMDGPU, [libdrm_amdgpu >= 2.4.72])
+PKG_CHECK_MODULES(LIBDRM_AMDGPU, [libdrm_amdgpu >= 2.4.76])
 PKG_CHECK_MODULES(GBM, [gbm])
 
 # Obtain compiler/linker options for the driver dependencies
@@ -194,8 +194,8 @@ AC_CHECK_HEADERS([misyncshm.h], [], [],
 AC_CHECK_HEADERS([present.h], [], [],
 		 [#include <X11/Xmd.h>
 		 #include <X11/Xproto.h>
-		 #include <X11/X.h>
-		 #include "xorg-server.h"])
+		 #include "xorg-server.h"
+		 #include <X11/X.h>])
 
 AC_CHECK_HEADERS([dri3.h], [], [],
 		 [#include <X11/Xmd.h>

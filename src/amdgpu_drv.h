@@ -178,23 +178,23 @@ amdgpu_master_screen(ScreenPtr screen)
 static inline ScreenPtr
 amdgpu_dirty_master(PixmapDirtyUpdatePtr dirty)
 {
-#ifdef HAS_DIRTYTRACKING_DRAWABLE_SRC
-	ScreenPtr screen = dirty->src->pScreen;
-#else
-	ScreenPtr screen = dirty->src->drawable.pScreen;
-#endif
+	return amdgpu_master_screen(dirty->slave_dst->drawable.pScreen);
+}
 
-	return amdgpu_master_screen(screen);
+static inline DrawablePtr
+amdgpu_dirty_src_drawable(PixmapDirtyUpdatePtr dirty)
+{
+#ifdef HAS_DIRTYTRACKING_DRAWABLE_SRC
+	return dirty->src;
+#else
+	return &dirty->src->drawable;
+#endif
 }
 
 static inline Bool
 amdgpu_dirty_src_equals(PixmapDirtyUpdatePtr dirty, PixmapPtr pixmap)
 {
-#ifdef HAS_DIRTYTRACKING_DRAWABLE_SRC
-	return dirty->src == &pixmap->drawable;
-#else
-	return dirty->src == pixmap;
-#endif
+	return amdgpu_dirty_src_drawable(dirty) == &pixmap->drawable;
 }
 
 
@@ -233,6 +233,13 @@ struct amdgpu_buffer {
 struct amdgpu_client_priv {
 	uint_fast32_t needs_flush;
 };
+
+struct amdgpu_device_priv {
+	CursorPtr cursor;
+	Bool sprite_visible;
+};
+
+extern DevScreenPrivateKeyRec amdgpu_device_private_key;
 
 typedef struct {
 	EntityInfoPtr pEnt;
@@ -274,6 +281,12 @@ typedef struct {
 	CreateScreenResourcesProcPtr CreateScreenResources;
 	CreateWindowProcPtr CreateWindow;
 	WindowExposuresProcPtr WindowExposures;
+	void (*SetCursor) (DeviceIntPtr pDev, ScreenPtr pScreen,
+			   CursorPtr pCursor, int x, int y);
+	void (*MoveCursor) (DeviceIntPtr pDev, ScreenPtr pScreen, int x, int y);
+
+	/* Number of SW cursors currently visible on this screen */
+	int sprites_visible;
 
 	Bool IsSecondary;
 
@@ -327,6 +340,7 @@ typedef struct {
 		SetSharedPixmapBackingProcPtr SavedSetSharedPixmapBacking;
 	} glamor;
 
+	xf86CrtcFuncsRec drmmode_crtc_funcs;
 } AMDGPUInfoRec, *AMDGPUInfoPtr;
 
 

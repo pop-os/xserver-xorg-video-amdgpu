@@ -273,7 +273,7 @@ amdgpu_present_check_flip(RRCrtcPtr crtc, WindowPtr window, PixmapPtr pixmap,
 	if (!info->allowPageFlip)
 		return FALSE;
 
-	if (info->hwcursor_disabled)
+	if (info->sprites_visible > 0)
 		return FALSE;
 
 	if (info->drmmode.dri2_flipping)
