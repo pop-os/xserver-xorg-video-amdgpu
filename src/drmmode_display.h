@@ -198,10 +198,6 @@ extern int drmmode_page_flip_target_relative(AMDGPUEntPtr pAMDGPUEnt,
 extern Bool drmmode_pre_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode, int cpp);
 extern void drmmode_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode);
 extern void drmmode_fini(ScrnInfoPtr pScrn, drmmode_ptr drmmode);
-extern void drmmode_sprite_set_cursor(DeviceIntPtr pDev, ScreenPtr pScreen,
-				      CursorPtr pCursor, int x, int y);
-extern void drmmode_sprite_move_cursor(DeviceIntPtr pDev, ScreenPtr pScreen, int x,
-				       int y);
 extern void drmmode_set_cursor(ScrnInfoPtr scrn, drmmode_ptr drmmode, int id,
 			       struct amdgpu_buffer *bo);
 void drmmode_adjust_frame(ScrnInfoPtr pScrn, drmmode_ptr drmmode, int x, int y);
@@ -237,6 +233,9 @@ int drmmode_get_current_ust(int drm_fd, CARD64 * ust);
 Bool drmmode_wait_vblank(xf86CrtcPtr crtc, drmVBlankSeqType type,
 			 uint32_t target_seq, unsigned long signal,
 			 uint64_t *ust, uint32_t *result_seq);
+
+
+miPointerSpriteFuncRec drmmode_sprite_funcs;
 
 
 #endif
