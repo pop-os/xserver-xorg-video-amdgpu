@@ -754,7 +754,7 @@ drmmode_crtc_scanout_update(xf86CrtcPtr crtc, DisplayModePtr mode,
 
 		amdgpu_scanout_do_update(crtc, scanout_id,
 					 screen->GetWindowPixmap(screen->root),
-					 box);
+					 *box);
 		amdgpu_glamor_finish(scrn);
 	}
 }
@@ -3079,7 +3079,7 @@ Bool amdgpu_do_pageflip(ScrnInfoPtr scrn, ClientPtr client,
 			}
 
 			amdgpu_scanout_do_update(crtc, scanout_id, new_front,
-						 &extents);
+						 extents);
 
 			drmmode_crtc_wait_pending_event(drmmode_crtc, pAMDGPUEnt->fd,
 							drmmode_crtc->scanout_update_pending);
