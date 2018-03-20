@@ -1,3 +1,9 @@
+xserver-xorg-video-amdgpu (18.0.1-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Tue, 20 Mar 2018 14:02:29 +0200
+
 xserver-xorg-video-amdgpu (18.0.0-1) unstable; urgency=medium
 
   * New upstream release.
