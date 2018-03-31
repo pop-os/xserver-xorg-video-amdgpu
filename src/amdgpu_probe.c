@@ -212,6 +212,35 @@ static Bool amdgpu_open_drm_master(ScrnInfoPtr pScrn,
 	return TRUE;
 }
 
+static Bool amdgpu_device_setup(ScrnInfoPtr pScrn,
+				struct pci_device *pci_dev,
+				struct xf86_platform_device *platform_dev,
+				AMDGPUEntPtr pAMDGPUEnt)
+{
+	uint32_t major_version;
+	uint32_t minor_version;
+
+	pAMDGPUEnt->platform_dev = platform_dev;
+	if (!amdgpu_open_drm_master(pScrn, pci_dev, platform_dev,
+				    pAMDGPUEnt))
+		return FALSE;
+
+	if (amdgpu_device_initialize(pAMDGPUEnt->fd,
+				     &major_version,
+				     &minor_version,
+				     &pAMDGPUEnt->pDev)) {
+		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+			   "amdgpu_device_initialize failed\n");
+		goto error_amdgpu;
+	}
+
+	return TRUE;
+
+error_amdgpu:
+	amdgpu_kernel_close_fd(pAMDGPUEnt);
+	return FALSE;
+}
+
 static Bool amdgpu_get_scrninfo(int entity_num, struct pci_device *pci_dev)
 {
 	ScrnInfoPtr pScrn = NULL;
@@ -252,27 +281,16 @@ static Bool amdgpu_get_scrninfo(int entity_num, struct pci_device *pci_dev)
 	pPriv = xf86GetEntityPrivate(pEnt->index, gAMDGPUEntityIndex);
 
 	if (!pPriv->ptr) {
-		uint32_t major_version;
-		uint32_t minor_version;
-
 		pPriv->ptr = xnfcalloc(sizeof(AMDGPUEntRec), 1);
 		if (!pPriv->ptr)
 			goto error;
 
 		pAMDGPUEnt = pPriv->ptr;
-		if (!amdgpu_open_drm_master(pScrn, pci_dev, NULL, pAMDGPUEnt))
+		if (!amdgpu_device_setup(pScrn, pci_dev, NULL, pAMDGPUEnt))
 			goto error;
 
 		pAMDGPUEnt->fd_ref = 1;
 
-		if (amdgpu_device_initialize(pAMDGPUEnt->fd,
-					     &major_version,
-					     &minor_version,
-					     &pAMDGPUEnt->pDev)) {
-			xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-				   "amdgpu_device_initialize failed\n");
-			goto error_amdgpu;
-		}
 	} else {
 		pAMDGPUEnt = pPriv->ptr;
 
@@ -294,8 +312,6 @@ static Bool amdgpu_get_scrninfo(int entity_num, struct pci_device *pci_dev)
 
 	return TRUE;
 
-error_amdgpu:
-	amdgpu_kernel_close_fd(pAMDGPUEnt);
 error:
 	free(pEnt);
 	return FALSE;
@@ -375,25 +391,15 @@ amdgpu_platform_probe(DriverPtr pDriver,
 	pPriv = xf86GetEntityPrivate(pEnt->index, gAMDGPUEntityIndex);
 
 	if (!pPriv->ptr) {
-		uint32_t major_version;
-		uint32_t minor_version;
 
 		pPriv->ptr = xnfcalloc(sizeof(AMDGPUEntRec), 1);
+
 		pAMDGPUEnt = pPriv->ptr;
-		pAMDGPUEnt->platform_dev = dev;
-		if (!amdgpu_open_drm_master(pScrn, NULL, dev, pAMDGPUEnt))
+		if (!amdgpu_device_setup(pScrn, NULL, dev, pAMDGPUEnt))
 			goto error;
 
 		pAMDGPUEnt->fd_ref = 1;
 
-		if (amdgpu_device_initialize(pAMDGPUEnt->fd,
-					     &major_version,
-					     &minor_version,
-					     &pAMDGPUEnt->pDev)) {
-			xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-				   "amdgpu_device_initialize failed\n");
-			goto error_amdgpu;
-		}
 	} else {
 		pAMDGPUEnt = pPriv->ptr;
 
@@ -415,8 +421,6 @@ amdgpu_platform_probe(DriverPtr pDriver,
 
 	return TRUE;
 
-error_amdgpu:
-	amdgpu_kernel_close_fd(pAMDGPUEnt);
 error:
 	free(pEnt);
 	return FALSE;
