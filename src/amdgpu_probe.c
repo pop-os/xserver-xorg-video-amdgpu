@@ -77,6 +77,16 @@ static void AMDGPUIdentify(int flags)
 	xf86PrintChipsets(AMDGPU_NAME, "Driver for AMD Radeon", AMDGPUAny);
 }
 
+static Bool amdgpu_device_matches(const drmDevicePtr device,
+				  const struct pci_device *dev)
+{
+	return (device->bustype == DRM_BUS_PCI &&
+		device->businfo.pci->domain == dev->domain &&
+		device->businfo.pci->bus == dev->bus &&
+		device->businfo.pci->dev == dev->dev &&
+		device->businfo.pci->func == dev->func);
+}
+
 static Bool amdgpu_kernel_mode_enabled(ScrnInfoPtr pScrn)
 {
 #if defined(__FreeBSD__) || defined(__FreeBSD_kernel__)
@@ -105,9 +115,11 @@ static int amdgpu_kernel_open_fd(ScrnInfoPtr pScrn,
 				 struct xf86_platform_device *platform_dev,
 				 AMDGPUEntPtr pAMDGPUEnt)
 {
+#define MAX_DRM_DEVICES 64
+	drmDevicePtr devices[MAX_DRM_DEVICES];
 	struct pci_device *dev;
 	const char *path;
-	int fd;
+	int fd = -1, i, ret;
 
 	if (platform_dev)
 		dev = platform_dev->pdev;
@@ -138,12 +150,28 @@ static int amdgpu_kernel_open_fd(ScrnInfoPtr pScrn,
 	if (!amdgpu_kernel_mode_enabled(pScrn))
 		return -1;
 
-	fd = drmOpen(NULL, pAMDGPUEnt->busid);
+	ret = drmGetDevices2(0, devices, ARRAY_SIZE(devices));
+	if (ret == -1) {
+		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+			   "[drm] Failed to retrieve DRM devices information.\n");
+		return -1;
+	}
+	for (i = 0; i < ret; i++) {
+		if (amdgpu_device_matches(devices[i], dev) &&
+		    devices[i]->available_nodes & (1 << DRM_NODE_PRIMARY)) {
+			path = devices[i]->nodes[DRM_NODE_PRIMARY];
+			fd = open(path, O_RDWR | O_CLOEXEC);
+			break;
+		}
+	}
+	drmFreeDevices(devices, ret);
+
 	if (fd == -1)
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
 			   "[drm] Failed to open DRM device for %s: %s\n",
 			   pAMDGPUEnt->busid, strerror(errno));
 	return fd;
+#undef MAX_DRM_DEVICES
 }
 
 void amdgpu_kernel_close_fd(AMDGPUEntPtr pAMDGPUEnt)
@@ -152,32 +180,31 @@ void amdgpu_kernel_close_fd(AMDGPUEntPtr pAMDGPUEnt)
 	if (!(pAMDGPUEnt->platform_dev &&
 	      pAMDGPUEnt->platform_dev->flags & XF86_PDEV_SERVER_FD))
 #endif
-		drmClose(pAMDGPUEnt->fd);
+		close(pAMDGPUEnt->fd);
 	pAMDGPUEnt->fd = -1;
 }
 
-static Bool amdgpu_open_drm_master(ScrnInfoPtr pScrn, AMDGPUEntPtr pAMDGPUEnt,
-				   struct pci_device *pci_dev)
+/* Pull a local version of the helper. It's available since 2.4.98 yet
+ * it may be too new for some distributions.
+ */
+static int local_drmIsMaster(int fd)
 {
-	drmSetVersion sv;
-	int err;
+	return drmAuthMagic(fd, 0) != -EACCES;
+}
 
-	pAMDGPUEnt->fd = amdgpu_kernel_open_fd(pScrn, pci_dev, NULL, pAMDGPUEnt);
+static Bool amdgpu_open_drm_master(ScrnInfoPtr pScrn,
+				   struct pci_device *pci_dev,
+				   struct xf86_platform_device *platform_dev,
+				   AMDGPUEntPtr pAMDGPUEnt)
+{
+	pAMDGPUEnt->fd = amdgpu_kernel_open_fd(pScrn, pci_dev, platform_dev, pAMDGPUEnt);
 	if (pAMDGPUEnt->fd == -1)
 		return FALSE;
 
-	/* Check that what we opened was a master or a master-capable FD,
-	 * by setting the version of the interface we'll use to talk to it.
-	 * (see DRIOpenDRMMaster() in DRI1)
-	 */
-	sv.drm_di_major = 1;
-	sv.drm_di_minor = 1;
-	sv.drm_dd_major = -1;
-	sv.drm_dd_minor = -1;
-	err = drmSetInterfaceVersion(pAMDGPUEnt->fd, &sv);
-	if (err != 0) {
+	/* Check that what we opened is a master or a master-capable FD */
+	if (!local_drmIsMaster(pAMDGPUEnt->fd)) {
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-			   "[drm] failed to set drm interface version.\n");
+			   "[drm] device is not DRM master.\n");
 		amdgpu_kernel_close_fd(pAMDGPUEnt);
 		return FALSE;
 	}
@@ -233,7 +260,7 @@ static Bool amdgpu_get_scrninfo(int entity_num, struct pci_device *pci_dev)
 			goto error;
 
 		pAMDGPUEnt = pPriv->ptr;
-		if (!amdgpu_open_drm_master(pScrn, pAMDGPUEnt, pci_dev))
+		if (!amdgpu_open_drm_master(pScrn, pci_dev, NULL, pAMDGPUEnt))
 			goto error;
 
 		pAMDGPUEnt->fd_ref = 1;
@@ -354,8 +381,7 @@ amdgpu_platform_probe(DriverPtr pDriver,
 		pPriv->ptr = xnfcalloc(sizeof(AMDGPUEntRec), 1);
 		pAMDGPUEnt = pPriv->ptr;
 		pAMDGPUEnt->platform_dev = dev;
-		pAMDGPUEnt->fd = amdgpu_kernel_open_fd(pScrn, NULL, dev, pAMDGPUEnt);
-		if (pAMDGPUEnt->fd < 0)
+		if (!amdgpu_open_drm_master(pScrn, NULL, dev, pAMDGPUEnt))
 			goto error;
 
 		pAMDGPUEnt->fd_ref = 1;
