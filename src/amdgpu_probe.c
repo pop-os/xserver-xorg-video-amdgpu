@@ -392,7 +392,7 @@ static const struct pci_id_match amdgpu_device_match[] = {
     {0, 0, 0},
 };
 
-_X_EXPORT DriverRec AMDGPU = {
+DriverRec AMDGPU = {
 	AMDGPU_VERSION_CURRENT,
 	AMDGPU_DRIVER_NAME,
 	AMDGPUIdentify,
