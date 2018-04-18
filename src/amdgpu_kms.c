@@ -424,7 +424,7 @@ amdgpu_scanout_flip_abort(xf86CrtcPtr crtc, void *event_data)
 	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(crtc->scrn);
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
 
-	drmmode_crtc->scanout_update_pending = FALSE;
+	drmmode_crtc->scanout_update_pending = 0;
 	drmmode_fb_reference(pAMDGPUEnt->fd, &drmmode_crtc->flip_pending,
 			     NULL);
 }
@@ -509,7 +509,7 @@ amdgpu_prime_scanout_update_abort(xf86CrtcPtr crtc, void *event_data)
 {
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
 
-	drmmode_crtc->scanout_update_pending = FALSE;
+	drmmode_crtc->scanout_update_pending = 0;
 }
 
 void
@@ -650,7 +650,7 @@ amdgpu_prime_scanout_update_handler(xf86CrtcPtr crtc, uint32_t frame, uint64_t u
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
 
 	amdgpu_prime_scanout_do_update(crtc, 0);
-	drmmode_crtc->scanout_update_pending = FALSE;
+	drmmode_crtc->scanout_update_pending = 0;
 }
 
 static void
@@ -691,7 +691,7 @@ amdgpu_prime_scanout_update(PixmapDirtyUpdatePtr dirty)
 		return;
 	}
 
-	drmmode_crtc->scanout_update_pending = TRUE;
+	drmmode_crtc->scanout_update_pending = drm_queue_seq;
 }
 
 static void
@@ -749,7 +749,7 @@ amdgpu_prime_scanout_flip(PixmapDirtyUpdatePtr ent)
 	}
 
 	drmmode_crtc->scanout_id = scanout_id;
-	drmmode_crtc->scanout_update_pending = TRUE;
+	drmmode_crtc->scanout_update_pending = drm_queue_seq;
 }
 
 static void
@@ -892,7 +892,7 @@ amdgpu_scanout_update_abort(xf86CrtcPtr crtc, void *event_data)
 {
 	drmmode_crtc_private_ptr drmmode_crtc = event_data;
 
-	drmmode_crtc->scanout_update_pending = FALSE;
+	drmmode_crtc->scanout_update_pending = 0;
 }
 
 static void
@@ -967,7 +967,7 @@ amdgpu_scanout_update(xf86CrtcPtr xf86_crtc)
 		return;
 	}
 
-	drmmode_crtc->scanout_update_pending = TRUE;
+	drmmode_crtc->scanout_update_pending = drm_queue_seq;
 }
 
 static void
@@ -1032,7 +1032,7 @@ amdgpu_scanout_flip(ScreenPtr pScreen, AMDGPUInfoPtr info,
 	}
 
 	drmmode_crtc->scanout_id = scanout_id;
-	drmmode_crtc->scanout_update_pending = TRUE;
+	drmmode_crtc->scanout_update_pending = drm_queue_seq;
 }
 
 static void AMDGPUBlockHandler_KMS(BLOCKHANDLER_ARGS_DECL)
