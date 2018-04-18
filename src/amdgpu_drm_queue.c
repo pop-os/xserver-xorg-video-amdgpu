@@ -150,6 +150,9 @@ amdgpu_drm_abort_entry(uintptr_t seq)
 {
 	struct amdgpu_drm_queue_entry *e, *tmp;
 
+	if (seq == AMDGPU_DRM_QUEUE_ERROR)
+		return;
+
 	xorg_list_for_each_entry_safe(e, tmp, &amdgpu_drm_queue, list) {
 		if (e->seq == seq) {
 			amdgpu_drm_abort_one(e);
