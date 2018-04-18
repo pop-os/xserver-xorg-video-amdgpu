@@ -953,8 +953,8 @@ done:
 		if (drmmode_crtc->scanout[scanout_id].pixmap &&
 		    fb != amdgpu_pixmap_get_fb(drmmode_crtc->
 					       scanout[scanout_id].pixmap)) {
-			drmmode_crtc_wait_pending_event(drmmode_crtc, pAMDGPUEnt->fd,
-							drmmode_crtc->scanout_update_pending);
+			amdgpu_drm_abort_entry(drmmode_crtc->scanout_update_pending);
+			drmmode_crtc->scanout_update_pending = 0;
 			drmmode_crtc_scanout_free(drmmode_crtc);
 		} else if (!drmmode_crtc->tear_free) {
 			drmmode_crtc_scanout_destroy(drmmode,
@@ -3083,8 +3083,12 @@ Bool amdgpu_do_pageflip(ScrnInfoPtr scrn, ClientPtr client,
 			amdgpu_scanout_do_update(crtc, scanout_id, new_front,
 						 extents);
 
-			drmmode_crtc_wait_pending_event(drmmode_crtc, pAMDGPUEnt->fd,
-							drmmode_crtc->scanout_update_pending);
+			if (drmmode_crtc->scanout_update_pending) {
+				drmmode_crtc_wait_pending_event(drmmode_crtc, pAMDGPUEnt->fd,
+								drmmode_crtc->flip_pending);
+				amdgpu_drm_abort_entry(drmmode_crtc->scanout_update_pending);
+				drmmode_crtc->scanout_update_pending = 0;
+			}
 		}
 
 		if (crtc == ref_crtc) {
