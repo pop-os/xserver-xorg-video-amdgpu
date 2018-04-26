@@ -1739,6 +1739,22 @@ static void drmmode_output_create_resources(xf86OutputPtr output)
 	}
 }
 
+static void
+drmmode_output_set_tear_free(AMDGPUEntPtr pAMDGPUEnt,
+			     drmmode_output_private_ptr drmmode_output,
+			     xf86CrtcPtr crtc, int tear_free)
+{
+	if (drmmode_output->tear_free == tear_free)
+		return;
+
+	drmmode_output->tear_free = tear_free;
+
+	if (crtc) {
+		drmmode_set_mode_major(crtc, &crtc->mode, crtc->rotation,
+				       crtc->x, crtc->y);
+	}
+}
+
 static Bool
 drmmode_output_set_property(xf86OutputPtr output, Atom property,
 			    RRPropertyValuePtr value)
@@ -1782,18 +1798,9 @@ drmmode_output_set_property(xf86OutputPtr output, Atom property,
 			for (j = 0; j < p->mode_prop->count_enums; j++) {
 				if (!strcmp(p->mode_prop->enums[j].name, name)) {
 					if (i == (drmmode_output->num_props - 1)) {
-						if (drmmode_output->tear_free != j) {
-							xf86CrtcPtr crtc = output->crtc;
-
-							drmmode_output->tear_free = j;
-							if (crtc) {
-								drmmode_set_mode_major(crtc,
-										       &crtc->mode,
-										       crtc->rotation,
-										       crtc->x,
-										       crtc->y);
-							}
-						}
+						drmmode_output_set_tear_free(pAMDGPUEnt,
+									     drmmode_output,
+									     output->crtc, j);
 					} else {
 						drmModeConnectorSetProperty(pAMDGPUEnt->fd,
 									    drmmode_output->output_id,
