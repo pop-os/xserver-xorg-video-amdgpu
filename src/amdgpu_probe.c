@@ -54,9 +54,7 @@
 #include <xf86_OSproc.h>
 #endif
 
-#ifdef XSERVER_PLATFORM_BUS
 #include <xf86platformBus.h>
-#endif
 
 _X_EXPORT int gAMDGPUEntityIndex = -1;
 
@@ -120,7 +118,7 @@ static int amdgpu_kernel_open_fd(ScrnInfoPtr pScrn,
 	char *busid;
 	int fd;
 
-#ifdef XF86_PDEV_SERVER_FD
+#ifdef ODEV_ATTRIB_FD
 	if (platform_dev) {
 		fd = xf86_get_platform_device_int_attrib(platform_dev,
 							 ODEV_ATTRIB_FD, -1);
@@ -154,7 +152,7 @@ static int amdgpu_kernel_open_fd(ScrnInfoPtr pScrn,
 
 void amdgpu_kernel_close_fd(AMDGPUEntPtr pAMDGPUEnt)
 {
-#ifdef XF86_PDEV_SERVER_FD
+#if defined(XSERVER_PLATFORM_BUS) && defined(XF86_PDEV_SERVER_FD)
 	if (!(pAMDGPUEnt->platform_dev &&
 	      pAMDGPUEnt->platform_dev->flags & XF86_PDEV_SERVER_FD))
 #endif
