@@ -216,7 +216,7 @@ amdgpu_glamor_create_pixmap(ScreenPtr screen, int w, int h, int depth,
 		int stride;
 
 		priv = calloc(1, sizeof(struct amdgpu_pixmap));
-		if (priv == NULL)
+		if (!priv)
 			goto fallback_pixmap;
 
 		priv->bo = amdgpu_alloc_pixmap_bo(scrn, w, h, depth, usage,

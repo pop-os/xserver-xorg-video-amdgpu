@@ -162,7 +162,7 @@ amdgpu_dri2_create_buffer2(ScreenPtr pScreen,
 	}
 
 	buffers = calloc(1, sizeof *buffers);
-	if (buffers == NULL)
+	if (!buffers)
 		goto error;
 
 	if (pixmap) {
@@ -176,7 +176,7 @@ amdgpu_dri2_create_buffer2(ScreenPtr pScreen,
 	}
 
 	privates = calloc(1, sizeof(struct dri2_buffer_priv));
-	if (privates == NULL)
+	if (!privates)
 		goto error;
 
 	buffers->attachment = attachment;
@@ -830,7 +830,7 @@ static int amdgpu_dri2_get_msc(DrawablePtr draw, CARD64 * ust, CARD64 * msc)
 	xf86CrtcPtr crtc = amdgpu_dri2_drawable_crtc(draw, TRUE);
 
 	/* Drawable not displayed, make up a value */
-	if (crtc == NULL) {
+	if (!crtc) {
 		*ust = 0;
 		*msc = 0;
 		return TRUE;
@@ -941,7 +941,7 @@ static int amdgpu_dri2_schedule_wait_msc(ClientPtr client, DrawablePtr draw,
 	remainder &= 0xffffffff;
 
 	/* Drawable not visible, return immediately */
-	if (crtc == NULL)
+	if (!crtc)
 		goto out_complete;
 
 	msc_delta = amdgpu_get_msc_delta(draw, crtc);
@@ -1101,7 +1101,7 @@ static int amdgpu_dri2_schedule_swap(ClientPtr client, DrawablePtr draw,
 	amdgpu_dri2_ref_buffer(back);
 
 	/* either off-screen or CRTC not usable... just complete the swap */
-	if (crtc == NULL)
+	if (!crtc)
 		goto blit_fallback;
 
 	msc_delta = amdgpu_get_msc_delta(draw, crtc);

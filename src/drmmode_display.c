@@ -368,7 +368,7 @@ create_pixmap_for_fbcon(drmmode_ptr drmmode,
 		return pixmap;
 
 	fbcon = drmModeGetFB(pAMDGPUEnt->fd, fbcon_id);
-	if (fbcon == NULL)
+	if (!fbcon)
 		return NULL;
 
 	if (fbcon->depth != pScrn->depth ||
@@ -384,7 +384,7 @@ create_pixmap_for_fbcon(drmmode_ptr drmmode,
 	}
 
 	bo = calloc(1, sizeof(struct amdgpu_buffer));
-	if (bo == NULL) {
+	if (!bo) {
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
 			   "Couldn't allocate bo for fbcon handle\n");
 		goto out_free_fb;
@@ -1342,7 +1342,7 @@ drmmode_crtc_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode, drmModeResPtr mode_res
 	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
 
 	crtc = xf86CrtcCreate(pScrn, &info->drmmode_crtc_funcs);
-	if (crtc == NULL)
+	if (!crtc)
 		return 0;
 
 	drmmode_crtc = xnfcalloc(sizeof(drmmode_crtc_private_rec), 1);
@@ -2233,7 +2233,7 @@ static Bool drmmode_xf86crtc_resize(ScrnInfoPtr scrn, int width, int height)
 					   width, height, -1, -1, pitch, info->front_buffer->cpu_ptr);
 	} else {
 		fb_shadow = calloc(1, pitch * scrn->virtualY);
-		if (fb_shadow == NULL)
+		if (!fb_shadow)
 			goto fail;
 		free(info->fb_shadow);
 		info->fb_shadow = fb_shadow;

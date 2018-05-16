@@ -1511,7 +1511,7 @@ Bool AMDGPUPreInit_KMS(ScrnInfoPtr pScrn, int flags)
 			return FALSE;
 	}
 
-	if (pScrn->modes == NULL
+	if (!pScrn->modes
 #ifdef XSERVER_PLATFORM_BUS
 	    && !pScrn->is_gpu
 #endif
@@ -1781,7 +1781,7 @@ Bool AMDGPUScreenInit_KMS(ScreenPtr pScreen, int argc, char **argv)
 		info->fb_shadow = calloc(1,
 					 pScrn->displayWidth * pScrn->virtualY *
 					 ((pScrn->bitsPerPixel + 7) >> 3));
-		if (info->fb_shadow == NULL) {
+		if (!info->fb_shadow) {
 			xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
 				   "Failed to allocate shadow framebuffer\n");
 			return FALSE;
@@ -2160,7 +2160,7 @@ static Bool amdgpu_setup_kernel_mem(ScreenPtr pScreen)
 	cursor_size = AMDGPU_ALIGN(cursor_size, AMDGPU_GPU_PAGE_SIZE);
 	for (c = 0; c < xf86_config->num_crtc; c++) {
 		/* cursor objects */
-		if (info->cursor_buffer[c] == NULL) {
+		if (!info->cursor_buffer[c]) {
 			if (info->gbm) {
 				info->cursor_buffer[c] = (struct amdgpu_buffer *)calloc(1, sizeof(struct amdgpu_buffer));
 				if (!info->cursor_buffer[c]) {
@@ -2202,7 +2202,7 @@ static Bool amdgpu_setup_kernel_mem(ScreenPtr pScreen)
 		}
 	}
 
-	if (info->front_buffer == NULL) {
+	if (!info->front_buffer) {
 		int pitch;
 		int hint = 0;
 
