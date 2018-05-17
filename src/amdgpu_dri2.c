@@ -161,29 +161,28 @@ amdgpu_dri2_create_buffer2(ScreenPtr pScreen,
 						   AMDGPU_CREATE_PIXMAP_DRI2);
 	}
 
+	if (!pixmap)
+		return NULL;
+
 	buffers = calloc(1, sizeof *buffers);
 	if (!buffers)
 		goto error;
 
-	if (pixmap) {
-		if (is_glamor_pixmap) {
-			pixmap = amdgpu_glamor_set_pixmap_bo(drawable, pixmap);
-			pixmap->refcnt++;
-		}
-
-		if (!amdgpu_get_flink_name(pAMDGPUEnt, pixmap, &buffers->name))
-			goto error;
+	if (is_glamor_pixmap) {
+		pixmap = amdgpu_glamor_set_pixmap_bo(drawable, pixmap);
+		pixmap->refcnt++;
 	}
+
+	if (!amdgpu_get_flink_name(pAMDGPUEnt, pixmap, &buffers->name))
+		goto error;
 
 	privates = calloc(1, sizeof(struct dri2_buffer_priv));
 	if (!privates)
 		goto error;
 
 	buffers->attachment = attachment;
-	if (pixmap) {
-		buffers->pitch = pixmap->devKind;
-		buffers->cpp = cpp;
-	}
+	buffers->pitch = pixmap->devKind;
+	buffers->cpp = cpp;
 	buffers->driverPrivate = privates;
 	buffers->format = format;
 	buffers->flags = 0;	/* not tiled */
@@ -195,8 +194,7 @@ amdgpu_dri2_create_buffer2(ScreenPtr pScreen,
 
 error:
 	free(buffers);
-	if (pixmap)
-		(*pScreen->DestroyPixmap) (pixmap);
+	(*pScreen->DestroyPixmap) (pixmap);
 	return NULL;
 }
 
