@@ -2191,6 +2191,14 @@ static Bool drmmode_xf86crtc_resize(ScrnInfoPtr scrn, int width, int height)
 	if (scrn->virtualX == width && scrn->virtualY == height)
 		return TRUE;
 
+	if (width > xf86_config->maxWidth || height > xf86_config->maxHeight) {
+		xf86DrvMsg(scrn->scrnIndex, X_WARNING,
+			   "Xorg tried resizing screen to %dx%d, but maximum "
+			   "supported is %dx%d\n", width, height,
+			   xf86_config->maxWidth, xf86_config->maxHeight);
+		return FALSE;
+	}
+
 	if (info->shadow_primary)
 		hint = AMDGPU_CREATE_PIXMAP_LINEAR | AMDGPU_CREATE_PIXMAP_GTT;
 	else if (!info->use_glamor)
