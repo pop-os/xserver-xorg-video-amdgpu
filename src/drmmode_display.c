@@ -777,6 +777,127 @@ static Bool drmmode_cm_enabled(drmmode_ptr drmmode)
 }
 
 /**
+ * Configure and change a color property on a CRTC, through RandR. Only the
+ * specified output will be affected, even if the CRTC is attached to multiple
+ * outputs. Note that changes will be non-pending: the changes won't be pushed
+ * to kernel driver.
+ *
+ * @output: RandR output to set the property on.
+ * @crtc: The driver-private CRTC object containing the color properties.
+ *        If this is NULL, "disabled" values of 0 will be used.
+ * @cm_prop_index: Color management property to configure and change.
+ *
+ * Return 0 on success, X-defined error code otherwise.
+ */
+static int rr_configure_and_change_cm_property(xf86OutputPtr output,
+					       drmmode_crtc_private_ptr crtc,
+					       enum drmmode_cm_prop cm_prop_index)
+{
+	drmmode_output_private_ptr drmmode_output = output->driver_private;
+	drmmode_ptr drmmode = drmmode_output->drmmode;
+	Bool need_configure = TRUE;
+	unsigned long length = 0;
+	void *data = NULL;
+	int format = 0;
+	uint32_t zero = 0;
+	INT32 range[2];
+	Atom atom;
+	int err;
+
+	if (cm_prop_index == CM_INVALID_PROP)
+		return BadName;
+
+	switch(cm_prop_index) {
+	case CM_GAMMA_LUT_SIZE:
+		format = 32;
+		length = 1;
+		data = &drmmode->gamma_lut_size;
+		range[0] = 0;
+		range[1] = -1;
+		break;
+	case CM_DEGAMMA_LUT_SIZE:
+		format = 32;
+		length = 1;
+		data = &drmmode->degamma_lut_size;
+		range[0] = 0;
+		range[1] = -1;
+		break;
+	case CM_GAMMA_LUT:
+		format = 16;
+		range[0] = 0;
+		range[1] = (1 << 16) - 1; // Max 16 bit unsigned int.
+		if (crtc && crtc->gamma_lut) {
+			/* Convert from 8bit size to 16bit size */
+			length = sizeof(*crtc->gamma_lut) >> 1;
+			length *= drmmode->gamma_lut_size;
+			data = crtc->gamma_lut;
+		} else {
+			length = 1;
+			data = &zero;
+		}
+		break;
+	case CM_DEGAMMA_LUT:
+		format = 16;
+		range[0] = 0;
+		range[1] = (1 << 16) - 1;
+		if (crtc && crtc->degamma_lut) {
+			length = sizeof(*crtc->degamma_lut) >> 1;
+			length *= drmmode->degamma_lut_size;
+			data = crtc->degamma_lut;
+		} else {
+			length = 1;
+			data = &zero;
+		}
+		break;
+	case CM_CTM:
+		/* CTM is fixed-point S31.32 format. */
+		format = 32;
+		need_configure = FALSE;
+		if (crtc && crtc->ctm) {
+			/* Convert from 8bit size to 32bit size */
+			length = sizeof(*crtc->ctm) >> 2;
+			data = crtc->ctm;
+		} else {
+			length = 1;
+			data = &zero;
+		}
+		break;
+	default:
+		return BadName;
+	}
+
+	atom = MakeAtom(cm_prop_names[cm_prop_index],
+			strlen(cm_prop_names[cm_prop_index]),
+			TRUE);
+	if (!atom)
+		return BadAlloc;
+
+	if (need_configure) {
+		err = RRConfigureOutputProperty(output->randr_output, atom,
+						FALSE, TRUE, FALSE, 2, range);
+		if (err) {
+			xf86DrvMsg(output->scrn->scrnIndex, X_ERROR,
+				   "Configuring color management property %s failed with %d\n",
+				   cm_prop_names[cm_prop_index], err);
+			return err;
+		}
+	}
+
+	/* Always issue a non-pending change. We'll push cm properties
+	 * ourselves.
+	 */
+	err = RRChangeOutputProperty(output->randr_output, atom,
+				     XA_INTEGER, format,
+				     PropModeReplace,
+				     length, data, FALSE, FALSE);
+	if (err)
+		xf86DrvMsg(output->scrn->scrnIndex, X_ERROR,
+			   "Changing color management property %s failed with %d\n",
+			   cm_prop_names[cm_prop_index], err);
+	return err;
+}
+
+/**
  * Push staged color management properties on the CRTC to DRM.
  *
  * @crtc: The CRTC containing staged properties
@@ -1780,6 +1901,7 @@ static void drmmode_output_create_resources(xf86OutputPtr output)
 {
 	AMDGPUInfoPtr info = AMDGPUPTR(output->scrn);
 	drmmode_output_private_ptr drmmode_output = output->driver_private;
+	drmmode_crtc_private_ptr drmmode_crtc;
 	drmModeConnectorPtr mode_output = drmmode_output->mode_output;
 	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(output->scrn);
 	drmModePropertyPtr drmmode_prop, tearfree_prop;
@@ -1903,6 +2025,15 @@ static void drmmode_output_create_resources(xf86OutputPtr output)
 			}
 		}
 	}
+
+	/* Do not configure cm properties on output if there's no support. */
+	if (!drmmode_cm_enabled(drmmode_output->drmmode))
+		return;
+
+	drmmode_crtc = output->crtc ? output->crtc->driver_private : NULL;
+
+	for (i = 0; i < CM_NUM_PROPS; i++)
+		rr_configure_and_change_cm_property(output, drmmode_crtc, i);
 }
 
 static void
