@@ -1245,9 +1245,21 @@ drmmode_crtc_gamma_do_set(xf86CrtcPtr crtc, uint16_t *red, uint16_t *green,
 {
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
 	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(crtc->scrn);
+	int ret;
 
-	drmModeCrtcSetGamma(pAMDGPUEnt->fd, drmmode_crtc->mode_crtc->crtc_id,
-			    size, red, green, blue);
+	/* Use legacy if no support for non-legacy gamma */
+	if (!drmmode_cm_enabled(drmmode_crtc->drmmode)) {
+		drmModeCrtcSetGamma(pAMDGPUEnt->fd,
+				    drmmode_crtc->mode_crtc->crtc_id,
+				    size, red, green, blue);
+		return;
+	}
+
+	ret = drmmode_crtc_push_cm_prop(crtc, CM_GAMMA_LUT);
+	if (ret)
+		xf86DrvMsg(crtc->scrn->scrnIndex, X_ERROR,
+			   "Setting Gamma LUT failed with errno %d\n",
+			   ret);
 }
 
 Bool
