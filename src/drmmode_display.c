@@ -898,6 +898,88 @@ static int rr_configure_and_change_cm_property(xf86OutputPtr output,
 }
 
 /**
+* Stage a color management property. This parses the property value, according
+* to the cm property type, then stores it within the driver-private CRTC
+* object.
+*
+* @crtc: The CRTC to stage the new color management properties in
+* @cm_prop_index: The color property to stage
+* @value: The RandR property value to stage
+*
+* Return 0 on success, X-defined error code on failure.
+*/
+static int drmmode_crtc_stage_cm_prop(xf86CrtcPtr crtc,
+				      enum drmmode_cm_prop cm_prop_index,
+				      RRPropertyValuePtr value)
+{
+	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
+	drmmode_ptr drmmode = drmmode_crtc->drmmode;
+	size_t expected_bytes = 0;
+	void **blob_data = NULL;
+	Bool use_default = FALSE;
+
+	/* Update properties on the driver-private CRTC */
+	switch (cm_prop_index) {
+	case CM_GAMMA_LUT:
+		/* Calculate the expected size of value in bytes */
+		expected_bytes = sizeof(struct drm_color_lut) *
+					drmmode->gamma_lut_size;
+
+		/* For gamma and degamma, we allow a default SRGB curve to be
+		 * set via setting a single element
+		 *
+		 * Otherwise, value size is in terms of the value format.
+		 * Ensure it's also in bytes (<< 1) before comparing with the
+		 * expected bytes.
+		 */
+		if (value->size == 1)
+			use_default = TRUE;
+		else if (value->type != XA_INTEGER || value->format != 16 ||
+			 (size_t)(value->size << 1) != expected_bytes)
+			return BadLength;
+
+		blob_data = (void**)&drmmode_crtc->gamma_lut;
+		break;
+	case CM_DEGAMMA_LUT:
+		expected_bytes = sizeof(struct drm_color_lut) *
+					drmmode->degamma_lut_size;
+
+		if (value->size == 1)
+			use_default = TRUE;
+		else if (value->type != XA_INTEGER || value->format != 16 ||
+			 (size_t)(value->size << 1) != expected_bytes)
+			return BadLength;
+
+		blob_data = (void**)&drmmode_crtc->degamma_lut;
+		break;
+	case CM_CTM:
+		expected_bytes = sizeof(struct drm_color_ctm);
+
+		if (value->size == 1)
+			use_default = TRUE;
+		if (value->type != XA_INTEGER || value->format != 32 ||
+		    (size_t)(value->size << 2) != expected_bytes)
+			return BadLength;
+
+		blob_data = (void**)&drmmode_crtc->ctm;
+		break;
+	default:
+		return BadName;
+	}
+
+	free(*blob_data);
+	if (!use_default) {
+		*blob_data = malloc(expected_bytes);
+		if (!*blob_data)
+			return BadAlloc;
+		memcpy(*blob_data, value->data, expected_bytes);
+	} else
+		*blob_data = NULL;
+
+	return Success;
+}
+
+/**
  * Push staged color management properties on the CRTC to DRM.
  *
  * @crtc: The CRTC containing staged properties
@@ -2067,7 +2149,20 @@ drmmode_output_set_property(xf86OutputPtr output, Atom property,
 {
 	drmmode_output_private_ptr drmmode_output = output->driver_private;
 	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(output->scrn);
+	enum drmmode_cm_prop cm_prop_index;
 	int i;
+
+	cm_prop_index = get_cm_enum_from_str(NameForAtom(property));
+	if (cm_prop_index >= 0 && cm_prop_index < CM_DEGAMMA_LUT_SIZE) {
+		if (!output->crtc)
+			return FALSE;
+		if (drmmode_crtc_stage_cm_prop(output->crtc, cm_prop_index,
+					       value))
+			return FALSE;
+		if (drmmode_crtc_push_cm_prop(output->crtc, cm_prop_index))
+			return FALSE;
+		return TRUE;
+	}
 
 	for (i = 0; i < drmmode_output->num_props; i++) {
 		drmmode_prop_ptr p = &drmmode_output->props[i];
