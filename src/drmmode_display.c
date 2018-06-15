@@ -777,6 +777,150 @@ static Bool drmmode_cm_enabled(drmmode_ptr drmmode)
 }
 
 /**
+ * If legacy LUT is a, and non-legacy LUT is b, then the result of b(a(x)) is
+ * returned in out_lut. out_lut's length is expected to be the same as the
+ * non-legacy LUT b.
+ *
+ * @a_(red|green|blue): The red, green, and blue components of the legacy LUT.
+ * @b_lut: The non-legacy LUT, in DRM's color LUT format.
+ * @out_lut: The composed LUT, in DRM's color LUT format.
+ * @len_a: Length of legacy lut.
+ * @len_b: Length of non-legacy lut.
+ */
+static void drmmode_lut_compose(uint16_t *a_red,
+				uint16_t *a_green,
+				uint16_t *a_blue,
+				struct drm_color_lut *b_lut,
+				struct drm_color_lut *out_lut,
+				uint32_t len_a, uint32_t len_b)
+{
+	uint32_t i_l, i_r, i;
+	uint32_t i_amax, i_bmax;
+	uint32_t coeff_ibmax;
+	uint32_t j;
+	uint64_t a_out_ibmax;
+	int color;
+	size_t struct_size = sizeof(struct drm_color_lut);
+
+	uint32_t max_lut = (1 << 16) - 1;
+
+	i_amax = len_a - 1;
+	i_bmax = len_b - 1;
+
+	/* A linear interpolation is done on the legacy LUT before it is
+	 * composed, to bring it up-to-size with the non-legacy LUT. The
+	 * interpolation uses integers by keeping things multiplied until the
+	 * last moment.
+	 */
+	for (color = 0; color < 3; color++) {
+		uint16_t *a, *b, *out;
+
+		/* Set the initial pointers to the right color components. The
+		 * inner for-loop will then maintain the correct offset from
+		 * the initial element.
+		 */
+		if (color == 0) {
+			a = a_red;
+			b = &b_lut[0].red;
+			out = &out_lut[0].red;
+		} else if (color == 1) {
+			a = a_green;
+			b = &b_lut[0].green;
+			out = &out_lut[0].green;
+		} else {
+			a = a_blue;
+			b = &b_lut[0].blue;
+			out = &out_lut[0].blue;
+		}
+
+		for (i = 0; i < len_b; i++) {
+			/* i_l and i_r tracks the left and right elements in
+			 * a_lut, to the sample point i. Also handle last
+			 * element edge case, when i_l = i_amax.
+			 */
+			i_l = i * i_amax / i_bmax;
+			i_r = i_l + !!(i_amax - i_l);
+
+			/* coeff is intended to be in [0, 1), depending on
+			 * where sample i is between i_l and i_r. We keep it
+			 * multiplied with i_bmax throughout to maintain
+			 * precision */
+			coeff_ibmax = (i * i_amax) - (i_l * i_bmax);
+			a_out_ibmax = i_bmax * a[i_l] +
+				      coeff_ibmax * (a[i_r] - a[i_l]);
+
+			/* j = floor((a_out/max_lut)*i_bmax).
+			 * i.e. the element in LUT b that a_out maps to. We
+			 * have to divide by max_lut to normalize a_out, since
+			 * values in the LUTs are [0, 1<<16)
+			 */
+			j = a_out_ibmax / max_lut;
+			*(uint16_t*)((void*)out + (i*struct_size)) =
+				*(uint16_t*)((void*)b + (j*struct_size));
+		}
+	}
+
+	for (i = 0; i < len_b; i++)
+		out_lut[i].reserved = 0;
+}
+
+/**
+ * Resize a LUT, using linear interpolation.
+ *
+ * @in_(red|green|blue): Legacy LUT components
+ * @out_lut: The resized LUT is returned here, in DRM color LUT format.
+ * @len_in: Length of legacy LUT.
+ * @len_out: Length of out_lut, i.e. the target size.
+ */
+static void drmmode_lut_interpolate(uint16_t *in_red,
+				    uint16_t *in_green,
+				    uint16_t *in_blue,
+				    struct drm_color_lut *out_lut,
+				    uint32_t len_in, uint32_t len_out)
+{
+	uint32_t i_l, i_r, i;
+	uint32_t i_amax, i_bmax;
+	uint32_t coeff_ibmax;
+	uint64_t out_ibmax;
+	int color;
+	size_t struct_size = sizeof(struct drm_color_lut);
+
+	i_amax = len_in - 1;
+	i_bmax = len_out - 1;
+
+	/* See @drmmode_lut_compose for details */
+	for (color = 0; color < 3; color++) {
+		uint16_t *in, *out;
+
+		if (color == 0) {
+			in = in_red;
+			out = &out_lut[0].red;
+		} else if (color == 1) {
+			in = in_green;
+			out = &out_lut[0].green;
+		} else {
+			in = in_blue;
+			out = &out_lut[0].blue;
+		}
+
+		for (i = 0; i < len_out; i++) {
+			i_l = i * i_amax / i_bmax;
+			i_r = i_l + !!(i_amax - i_l);
+
+			coeff_ibmax = (i * i_amax) - (i_l * i_bmax);
+			out_ibmax = i_bmax * in[i_l] +
+				      coeff_ibmax * (in[i_r] - in[i_l]);
+
+			*(uint16_t*)((void*)out + (i*struct_size)) =
+				out_ibmax / i_bmax;
+		}
+	}
+
+	for (i = 0; i < len_out; i++)
+		out_lut[i].reserved = 0;
+}
+
+/**
  * Configure and change a color property on a CRTC, through RandR. Only the
  * specified output will be affected, even if the CRTC is attached to multiple
  * outputs. Note that changes will be non-pending: the changes won't be pushed
@@ -993,6 +1137,7 @@ static int drmmode_crtc_push_cm_prop(xf86CrtcPtr crtc,
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
 	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(crtc->scrn);
 	drmmode_ptr drmmode = drmmode_crtc->drmmode;
+	Bool free_blob_data = FALSE;
 	uint32_t created_blob_id = 0;
 	uint32_t drm_prop_id;
 	size_t expected_bytes = 0;
@@ -1004,7 +1149,39 @@ static int drmmode_crtc_push_cm_prop(xf86CrtcPtr crtc,
 		/* Calculate the expected size of value in bytes */
 		expected_bytes = sizeof(struct drm_color_lut) *
 					drmmode->gamma_lut_size;
-		blob_data = drmmode_crtc->gamma_lut;
+
+		/* Legacy gamma LUT is disabled on deep 30bpp color. In which
+		 * case, directly use non-legacy LUT.
+		 */
+		if (!crtc->funcs->gamma_set) {
+			blob_data = drmmode_crtc->gamma_lut;
+			goto do_push;
+		}
+
+		blob_data = malloc(expected_bytes);
+		if (!blob_data)
+			return BadAlloc;
+
+		free_blob_data = TRUE;
+		/*
+		 * Compose legacy and non-legacy LUT if non-legacy was set.
+		 * Otherwise, interpolate legacy LUT to non-legacy size.
+		 */
+		if (drmmode_crtc->gamma_lut) {
+			drmmode_lut_compose(crtc->gamma_red,
+					    crtc->gamma_green,
+					    crtc->gamma_blue,
+					    drmmode_crtc->gamma_lut,
+					    blob_data, crtc->gamma_size,
+					    drmmode->gamma_lut_size);
+		} else {
+			drmmode_lut_interpolate(crtc->gamma_red,
+						crtc->gamma_green,
+						crtc->gamma_blue,
+						blob_data,
+						crtc->gamma_size,
+						drmmode->gamma_lut_size);
+		}
 		break;
 	case CM_DEGAMMA_LUT:
 		expected_bytes = sizeof(struct drm_color_lut) *
@@ -1019,6 +1196,7 @@ static int drmmode_crtc_push_cm_prop(xf86CrtcPtr crtc,
 		return BadName;
 	}
 
+do_push:
 	if (blob_data) {
 		ret = drmModeCreatePropertyBlob(pAMDGPUEnt->fd,
 						blob_data, expected_bytes,
@@ -1027,6 +1205,8 @@ static int drmmode_crtc_push_cm_prop(xf86CrtcPtr crtc,
 			xf86DrvMsg(crtc->scrn->scrnIndex, X_ERROR,
 				   "Creating DRM blob failed with errno %d\n",
 				   ret);
+			if (free_blob_data)
+				free(blob_data);
 			return BadRequest;
 		}
 	}
@@ -1048,8 +1228,13 @@ static int drmmode_crtc_push_cm_prop(xf86CrtcPtr crtc,
 		xf86DrvMsg(crtc->scrn->scrnIndex, X_ERROR,
 			   "Setting DRM property blob failed with errno %d\n",
 			   ret);
+		if (free_blob_data)
+			free(blob_data);
 		return BadRequest;
 	}
+
+	if (free_blob_data)
+		free(blob_data);
 
 	return Success;
 }
