@@ -768,6 +768,89 @@ static enum drmmode_cm_prop get_cm_enum_from_str(const char *prop_name)
 	return CM_INVALID_PROP;
 }
 
+/**
+ * Return TRUE if kernel supports non-legacy color management.
+ */
+static Bool drmmode_cm_enabled(drmmode_ptr drmmode)
+{
+	return drmmode->cm_prop_ids[CM_GAMMA_LUT_SIZE] != 0;
+}
+
+/**
+ * Push staged color management properties on the CRTC to DRM.
+ *
+ * @crtc: The CRTC containing staged properties
+ * @cm_prop_index: The color property to push
+ *
+ * Return 0 on success, X-defined error codes on failure.
+ */
+static int drmmode_crtc_push_cm_prop(xf86CrtcPtr crtc,
+				     enum drmmode_cm_prop cm_prop_index)
+{
+	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
+	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(crtc->scrn);
+	drmmode_ptr drmmode = drmmode_crtc->drmmode;
+	uint32_t created_blob_id = 0;
+	uint32_t drm_prop_id;
+	size_t expected_bytes = 0;
+	void *blob_data = NULL;
+	int ret;
+
+	switch (cm_prop_index) {
+	case CM_GAMMA_LUT:
+		/* Calculate the expected size of value in bytes */
+		expected_bytes = sizeof(struct drm_color_lut) *
+					drmmode->gamma_lut_size;
+		blob_data = drmmode_crtc->gamma_lut;
+		break;
+	case CM_DEGAMMA_LUT:
+		expected_bytes = sizeof(struct drm_color_lut) *
+					drmmode->degamma_lut_size;
+		blob_data = drmmode_crtc->degamma_lut;
+		break;
+	case CM_CTM:
+		expected_bytes = sizeof(struct drm_color_ctm);
+		blob_data = drmmode_crtc->ctm;
+		break;
+	default:
+		return BadName;
+	}
+
+	if (blob_data) {
+		ret = drmModeCreatePropertyBlob(pAMDGPUEnt->fd,
+						blob_data, expected_bytes,
+						&created_blob_id);
+		if (ret) {
+			xf86DrvMsg(crtc->scrn->scrnIndex, X_ERROR,
+				   "Creating DRM blob failed with errno %d\n",
+				   ret);
+			return BadRequest;
+		}
+	}
+
+	drm_prop_id = drmmode_crtc->drmmode->cm_prop_ids[cm_prop_index];
+	ret = drmModeObjectSetProperty(pAMDGPUEnt->fd,
+				       drmmode_crtc->mode_crtc->crtc_id,
+				       DRM_MODE_OBJECT_CRTC,
+				       drm_prop_id,
+				       (uint64_t)created_blob_id);
+
+	/* If successful, kernel will have a reference already. Safe to destroy
+	 * the blob either way.
+	 */
+	if (blob_data)
+		drmModeDestroyPropertyBlob(pAMDGPUEnt->fd, created_blob_id);
+
+	if (ret) {
+		xf86DrvMsg(crtc->scrn->scrnIndex, X_ERROR,
+			   "Setting DRM property blob failed with errno %d\n",
+			   ret);
+		return BadRequest;
+	}
+
+	return Success;
+}
+
 static void
 drmmode_crtc_gamma_do_set(xf86CrtcPtr crtc, uint16_t *red, uint16_t *green,
 			  uint16_t *blue, int size)
@@ -1314,6 +1397,22 @@ static Bool drmmode_set_scanout_pixmap(xf86CrtcPtr crtc, PixmapPtr ppix)
 	return TRUE;
 }
 
+static void drmmode_crtc_destroy(xf86CrtcPtr crtc)
+{
+	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
+
+	drmModeFreeCrtc(drmmode_crtc->mode_crtc);
+
+	/* Free LUTs and CTM */
+	free(drmmode_crtc->gamma_lut);
+	free(drmmode_crtc->degamma_lut);
+	free(drmmode_crtc->ctm);
+
+	free(drmmode_crtc);
+	crtc->driver_private = NULL;
+}
+
+
 static xf86CrtcFuncsRec drmmode_crtc_funcs = {
 	.dpms = drmmode_crtc_dpms,
 	.set_mode_major = drmmode_set_mode_major,
@@ -1330,7 +1429,7 @@ static xf86CrtcFuncsRec drmmode_crtc_funcs = {
 	.shadow_create = drmmode_crtc_shadow_create,
 	.shadow_allocate = drmmode_crtc_shadow_allocate,
 	.shadow_destroy = drmmode_crtc_shadow_destroy,
-	.destroy = NULL,	/* XXX */
+	.destroy = drmmode_crtc_destroy,
 	.set_scanout_pixmap = drmmode_set_scanout_pixmap,
 };
 
@@ -1354,6 +1453,50 @@ void drmmode_crtc_hw_id(xf86CrtcPtr crtc)
 		drmmode_crtc->hw_id = -1;
 }
 
+/**
+ * Initialize color management properties for the given CRTC by programming
+ * the default gamma/degamma LUTs and CTM.
+ *
+ * If the CRTC does not support color management, or if errors occur during
+ * initialization, all color properties on the driver-private CRTC will left
+ * as NULL.
+ *
+ * @drm_fd: DRM file descriptor
+ * @crtc: CRTC to initialize color management on.
+ */
+static void drmmode_crtc_cm_init(int drm_fd, xf86CrtcPtr crtc)
+{
+	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
+	drmmode_ptr drmmode = drmmode_crtc->drmmode;
+	int i;
+
+	if (!drmmode_cm_enabled(drmmode))
+		return;
+
+	/* Init CTM to identity. Values are in S31.32 fixed-point format */
+	drmmode_crtc->ctm = calloc(1, sizeof(*drmmode_crtc->ctm));
+	if (!drmmode_crtc->ctm) {
+		xf86DrvMsg(crtc->scrn->scrnIndex, X_ERROR,
+			   "Memory error initializing CTM for CRTC%d",
+			   drmmode_get_crtc_id(crtc));
+		return;
+	}
+
+	drmmode_crtc->ctm->matrix[0] = drmmode_crtc->ctm->matrix[4] =
+		drmmode_crtc->ctm->matrix[8] = (uint64_t)1 << 32;
+
+	/* Push properties to reset properties currently in hardware */
+	for (i = 0; i < CM_DEGAMMA_LUT_SIZE; i++) {
+		if (drmmode_crtc_push_cm_prop(crtc, i))
+			xf86DrvMsg(crtc->scrn->scrnIndex, X_ERROR,
+				   "Failed to initialize color management "
+				   "property %s on CRTC%d. Property value may "
+				   "not reflect actual hardware state.\n",
+				   cm_prop_names[i],
+				   drmmode_get_crtc_id(crtc));
+	}
+}
+
 static unsigned int
 drmmode_crtc_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode, drmModeResPtr mode_res, int num)
 {
@@ -1373,6 +1516,8 @@ drmmode_crtc_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode, drmModeResPtr mode_res
 	drmmode_crtc->dpms_mode = DPMSModeOff;
 	crtc->driver_private = drmmode_crtc;
 	drmmode_crtc_hw_id(crtc);
+
+	drmmode_crtc_cm_init(pAMDGPUEnt->fd, crtc);
 
 	/* Mark num'th crtc as in use on this device. */
 	pAMDGPUEnt->assigned_crtcs |= (1 << num);

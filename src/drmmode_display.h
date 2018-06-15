@@ -131,6 +131,9 @@ typedef struct {
 	unsigned present_vblank_msc;
 	Bool present_flip_expected;
 #endif
+	struct drm_color_lut *degamma_lut;
+	struct drm_color_ctm *ctm;
+	struct drm_color_lut *gamma_lut;
 } drmmode_crtc_private_rec, *drmmode_crtc_private_ptr;
 
 typedef struct {
