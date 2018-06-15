@@ -746,6 +746,28 @@ drmmode_crtc_scanout_update(xf86CrtcPtr crtc, DisplayModePtr mode,
 	}
 }
 
+static char *cm_prop_names[] = {
+	"DEGAMMA_LUT",
+	"CTM",
+	"GAMMA_LUT",
+	"DEGAMMA_LUT_SIZE",
+	"GAMMA_LUT_SIZE",
+};
+
+/**
+ * Return the enum of the color management property with the given name.
+ */
+static enum drmmode_cm_prop get_cm_enum_from_str(const char *prop_name)
+{
+	enum drmmode_cm_prop ret;
+
+	for (ret = 0; ret < CM_NUM_PROPS; ret++) {
+		if (!strcmp(prop_name, cm_prop_names[ret]))
+			return ret;
+	}
+	return CM_INVALID_PROP;
+}
+
 static void
 drmmode_crtc_gamma_do_set(xf86CrtcPtr crtc, uint16_t *red, uint16_t *green,
 			  uint16_t *blue, int size)
@@ -2421,6 +2443,80 @@ drmmode_page_flip_target_relative(AMDGPUEntPtr pAMDGPUEnt,
 				 drm_queue_seq);
 }
 
+/**
+ * Initialize DDX color management support. It does two things:
+ *
+ * 1. Cache DRM color management property type IDs, as they do not change. They
+ *    will be used later to modify color management via DRM, or to determine if
+ *    there's kernel support for color management.
+ *
+ * 2. Cache degamma/gamma LUT sizes, since all CRTCs have the same LUT sizes on
+ *    AMD hardware.
+ *
+ * If the cached ID's are all 0 after calling this function, then color
+ * management is not supported. For short, checking if the gamma LUT size
+ * property ID == 0 is sufficient.
+ *
+ * This should be called before CRTCs are initialized within pre_init, as the
+ * cached values will be used there.
+ *
+ * @drm_fd: DRM file descriptor
+ * @drmmode: drmmode object, where the cached IDs are stored
+ * @mode_res: The DRM mode resource containing the CRTC ids
+ */
+static void drmmode_cm_init(int drm_fd, drmmode_ptr drmmode,
+			    drmModeResPtr mode_res)
+{
+	drmModeObjectPropertiesPtr drm_props;
+	drmModePropertyPtr drm_prop;
+	enum drmmode_cm_prop cm_prop;
+	uint32_t cm_enabled = 0;
+	uint32_t cm_all_enabled = (1 << CM_NUM_PROPS) - 1;
+	int i;
+
+	memset(drmmode->cm_prop_ids, 0, sizeof(drmmode->cm_prop_ids));
+	drmmode->gamma_lut_size = drmmode->degamma_lut_size = 0;
+
+	/* AMD hardware has color management support on all pipes. It is
+	 * therefore sufficient to only check the first CRTC.
+	 */
+	drm_props = drmModeObjectGetProperties(drm_fd,
+					       mode_res->crtcs[0],
+					       DRM_MODE_OBJECT_CRTC);
+	if (!drm_props)
+		return;
+
+	for (i = 0; i < drm_props->count_props; i++) {
+		drm_prop = drmModeGetProperty(drm_fd,
+					      drm_props->props[i]);
+		if (!drm_prop)
+			continue;
+
+		cm_prop = get_cm_enum_from_str(drm_prop->name);
+		if (cm_prop == CM_INVALID_PROP)
+			continue;
+
+		if (cm_prop == CM_DEGAMMA_LUT_SIZE)
+			drmmode->degamma_lut_size = drm_props->prop_values[i];
+		else if (cm_prop == CM_GAMMA_LUT_SIZE)
+			drmmode->gamma_lut_size = drm_props->prop_values[i];
+
+		drmmode->cm_prop_ids[cm_prop] = drm_props->props[i];
+		cm_enabled |= 1 << cm_prop;
+
+		drmModeFreeProperty(drm_prop);
+	}
+	drmModeFreeObjectProperties(drm_props);
+
+	/* cm is enabled only if all prop ids are found */
+	if (cm_enabled == cm_all_enabled)
+		return;
+
+	/* Otherwise, disable DDX cm support */
+	memset(drmmode->cm_prop_ids, 0, sizeof(drmmode->cm_prop_ids));
+	drmmode->gamma_lut_size = drmmode->degamma_lut_size = 0;
+}
+
 Bool drmmode_pre_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode, int cpp)
 {
 	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(pScrn);
@@ -2466,6 +2562,8 @@ Bool drmmode_pre_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode, int cpp)
 	 */
 	if (pScrn->depth == 30)
 		info->drmmode_crtc_funcs.gamma_set = NULL;
+
+	drmmode_cm_init(pAMDGPUEnt->fd, drmmode, mode_res);
 
 	for (i = 0; i < mode_res->count_crtcs; i++)
 		if (!xf86IsEntityShared(pScrn->entityList[0]) ||

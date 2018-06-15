@@ -36,6 +36,22 @@
 #include "amdgpu_probe.h"
 #include "amdgpu.h"
 
+/*
+ * Enum of non-legacy color management properties, according to DRM. Note that
+ * the values should be incremental (with the exception of the INVALID member),
+ * as defined by C99. The ordering also matters. Some logics (such as iterators
+ * and bitmasks) depend on these facts.
+ */
+enum drmmode_cm_prop {
+	CM_DEGAMMA_LUT,
+	CM_CTM,
+	CM_GAMMA_LUT,
+	CM_DEGAMMA_LUT_SIZE,
+	CM_GAMMA_LUT_SIZE,
+	CM_NUM_PROPS,
+	CM_INVALID_PROP = -1,
+};
+
 typedef struct {
 	ScrnInfoPtr scrn;
 #ifdef HAVE_LIBUDEV
@@ -49,6 +65,12 @@ typedef struct {
 
 	Bool dri2_flipping;
 	Bool present_flipping;
+
+	/* Cache for DRM property type IDs for CRTC color management */
+	uint32_t cm_prop_ids[CM_NUM_PROPS];
+	/* Lookup table sizes */
+	uint32_t degamma_lut_size;
+	uint32_t gamma_lut_size;
 } drmmode_rec, *drmmode_ptr;
 
 typedef struct {
