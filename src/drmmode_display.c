@@ -2125,6 +2125,27 @@ drmmode_output_set_property(xf86OutputPtr output, Atom property,
 
 static Bool drmmode_output_get_property(xf86OutputPtr output, Atom property)
 {
+	drmmode_crtc_private_ptr drmmode_crtc;
+	enum drmmode_cm_prop cm_prop_id;
+	int ret;
+
+	/* First, see if it's a cm property */
+	cm_prop_id = get_cm_enum_from_str(NameForAtom(property));
+	if (output->crtc && cm_prop_id != CM_INVALID_PROP) {
+		drmmode_crtc = output->crtc->driver_private;
+
+		ret = rr_configure_and_change_cm_property(output, drmmode_crtc,
+							  cm_prop_id);
+		if (ret) {
+			xf86DrvMsg(output->scrn->scrnIndex, X_ERROR,
+				   "Error getting color property: %d\n",
+				   ret);
+			return FALSE;
+		}
+		return TRUE;
+	}
+
+	/* Otherwise, must be an output property. */
 	return TRUE;
 }
 
