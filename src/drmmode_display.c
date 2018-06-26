@@ -1516,6 +1516,17 @@ drmmode_cursor_src_offset(Rotation rotation, int width, int height,
 #endif
 
 static uint32_t
+drmmode_cursor_gamma_passthrough(xf86CrtcPtr crtc, uint32_t argb)
+{
+	uint32_t alpha = argb >> 24;
+
+	if (!alpha)
+		return 0;
+
+	return argb;
+}
+
+static uint32_t
 drmmode_cursor_gamma(xf86CrtcPtr crtc, uint32_t argb)
 {
 	uint32_t alpha = argb >> 24;
@@ -1524,9 +1535,6 @@ drmmode_cursor_gamma(xf86CrtcPtr crtc, uint32_t argb)
 
 	if (!alpha)
 		return 0;
-
-	if (crtc->scrn->depth != 24 && crtc->scrn->depth != 32)
-		return argb;
 
 	/* Un-premultiply alpha */
 	for (i = 0; i < 3; i++)
@@ -1544,6 +1552,12 @@ static void drmmode_do_load_cursor_argb(xf86CrtcPtr crtc, CARD32 *image, uint32_
 {
 	ScrnInfoPtr pScrn = crtc->scrn;
 	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
+	uint32_t (*cursor_gamma)(xf86CrtcPtr crtc, uint32_t argb) =
+		drmmode_cursor_gamma;
+
+	if ((crtc->scrn->depth != 24 && crtc->scrn->depth != 32) ||
+	    drmmode_cm_enabled(&info->drmmode))
+		cursor_gamma = drmmode_cursor_gamma_passthrough;
 
 #if XF86_CRTC_VERSION < 7
 	if (crtc->driverIsPerformingTransform) {
@@ -1559,8 +1573,7 @@ static void drmmode_do_load_cursor_argb(xf86CrtcPtr crtc, CARD32 *image, uint32_
 								      dstx, dsty);
 
 				ptr[dsty * info->cursor_w + dstx] =
-					cpu_to_le32(drmmode_cursor_gamma(crtc,
-									 image[srcoffset]));
+					cpu_to_le32(cursor_gamma(crtc, image[srcoffset]));
 			}
 		}
 	} else
@@ -1570,7 +1583,7 @@ static void drmmode_do_load_cursor_argb(xf86CrtcPtr crtc, CARD32 *image, uint32_
 		int i;
 
 		for (i = 0; i < cursor_size; i++)
-			ptr[i] = cpu_to_le32(drmmode_cursor_gamma(crtc, image[i]));
+			ptr[i] = cpu_to_le32(cursor_gamma(crtc, image[i]));
 	}
 }
 
