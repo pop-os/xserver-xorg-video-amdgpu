@@ -18,7 +18,7 @@ override_dh_install:
 
 # Debug packages:
 override_dh_strip:
-	dh_strip -p$(XXV)-amdgpu --dbg-package=$(XXV)-amdgpu-dbg
+	dh_strip -p$(XXV)-amdgpu --dbgsym-migration="$(XXV)-dbg (<< 18.0.1-2~)"
 
 # That's a plugin, use appropriate warning level:
 override_dh_shlibdeps:
