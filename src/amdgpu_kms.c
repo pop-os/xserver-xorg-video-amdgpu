@@ -882,8 +882,6 @@ amdgpu_scanout_do_update(xf86CrtcPtr xf86_crtc, int scanout_id,
 		FreeScratchGC(gc);
 	}
 
-	amdgpu_glamor_flush(xf86_crtc->scrn);
-
 	return TRUE;
 }
 
@@ -908,8 +906,10 @@ amdgpu_scanout_update_handler(xf86CrtcPtr crtc, uint32_t frame, uint64_t usec,
 	    drmmode_crtc->dpms_mode == DPMSModeOn) {
 		if (amdgpu_scanout_do_update(crtc, drmmode_crtc->scanout_id,
 					     screen->GetWindowPixmap(screen->root),
-					     region->extents))
+					     region->extents)) {
+			amdgpu_glamor_flush(crtc->scrn);
 			RegionEmpty(region);
+		}
 	}
 
 	amdgpu_scanout_update_abort(crtc, event_data);
@@ -991,6 +991,8 @@ amdgpu_scanout_flip(ScreenPtr pScreen, AMDGPUInfoPtr info,
 				      pScreen->GetWindowPixmap(pScreen->root),
 				      region->extents))
 		return;
+
+	amdgpu_glamor_flush(scrn);
 	RegionEmpty(region);
 
 	drm_queue_seq = amdgpu_drm_queue_alloc(xf86_crtc,

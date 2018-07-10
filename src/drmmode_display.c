@@ -3978,6 +3978,7 @@ Bool amdgpu_do_pageflip(ScrnInfoPtr scrn, ClientPtr client,
 
 			amdgpu_scanout_do_update(crtc, scanout_id, new_front,
 						 extents);
+			amdgpu_glamor_flush(crtc->scrn);
 
 			if (drmmode_crtc->scanout_update_pending) {
 				drmmode_crtc_wait_pending_event(drmmode_crtc, pAMDGPUEnt->fd,
