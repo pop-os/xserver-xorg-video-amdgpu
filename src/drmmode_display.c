@@ -3333,13 +3333,11 @@ Bool drmmode_pre_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode, int cpp)
 		info->drmmode_crtc_funcs.shadow_destroy = NULL;
 	}
 
-	/* Hw gamma lut's are currently bypassed by the hw at color depth 30,
-	 * so spare the server the effort to compute and update the cluts.
-	 */
-	if (pScrn->depth == 30)
-		info->drmmode_crtc_funcs.gamma_set = NULL;
-
 	drmmode_cm_init(pAMDGPUEnt->fd, drmmode, mode_res);
+
+	/* Spare the server the effort to compute and update unused CLUTs. */
+	if (pScrn->depth == 30 && !drmmode_cm_enabled(drmmode))
+		info->drmmode_crtc_funcs.gamma_set = NULL;
 
 	for (i = 0; i < mode_res->count_crtcs; i++)
 		if (!xf86IsEntityShared(pScrn->entityList[0]) ||
@@ -3636,6 +3634,7 @@ Bool drmmode_set_desired_modes(ScrnInfoPtr pScrn, drmmode_ptr drmmode,
 Bool drmmode_setup_colormap(ScreenPtr pScreen, ScrnInfoPtr pScrn)
 {
 	xf86CrtcConfigPtr xf86_config = XF86_CRTC_CONFIG_PTR(pScrn);
+	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
 	int i;
 
 	if (xf86_config->num_crtc) {
@@ -3643,21 +3642,40 @@ Bool drmmode_setup_colormap(ScreenPtr pScreen, ScrnInfoPtr pScrn)
 			       "Initializing kms color map\n");
 		if (!miCreateDefColormap(pScreen))
 			return FALSE;
-		/* All radeons support 10 bit CLUTs. They get bypassed at depth 30. */
-		if (pScrn->depth != 30) {
-			if (!xf86HandleColormaps(pScreen, 256, 10, NULL, NULL,
-						 CMAP_PALETTED_TRUECOLOR
-						 | CMAP_RELOAD_ON_MODE_SWITCH))
-				return FALSE;
+
+		if (pScrn->depth == 30) {
+			if (!drmmode_cm_enabled(&info->drmmode))
+				return TRUE;
 
 			for (i = 0; i < xf86_config->num_crtc; i++) {
 				xf86CrtcPtr crtc = xf86_config->crtc[i];
+				void *gamma = malloc(1024 * 3 * sizeof(CARD16));
 
-				drmmode_crtc_gamma_do_set(crtc, crtc->gamma_red,
-							  crtc->gamma_green,
-							  crtc->gamma_blue,
-							  crtc->gamma_size);
+				if (!gamma) {
+					ErrorF("Failed to allocate gamma LUT memory\n");
+					return FALSE;
+				}
+
+				crtc->gamma_size = 1024;
+				crtc->gamma_red = gamma;
+				crtc->gamma_green = crtc->gamma_red + crtc->gamma_size;
+				crtc->gamma_blue = crtc->gamma_green + crtc->gamma_size;
 			}
+		}
+
+		/* All Radeons support 10 bit CLUTs. */
+		if (!xf86HandleColormaps(pScreen, 1 << pScrn->rgbBits, 10,
+					 NULL, NULL, CMAP_PALETTED_TRUECOLOR
+					 | CMAP_RELOAD_ON_MODE_SWITCH))
+			return FALSE;
+
+		for (i = 0; i < xf86_config->num_crtc; i++) {
+			xf86CrtcPtr crtc = xf86_config->crtc[i];
+
+			drmmode_crtc_gamma_do_set(crtc, crtc->gamma_red,
+						  crtc->gamma_green,
+						  crtc->gamma_blue,
+						  crtc->gamma_size);
 		}
 	}
 
