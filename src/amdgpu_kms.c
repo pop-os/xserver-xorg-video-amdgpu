@@ -1702,7 +1702,6 @@ static Bool AMDGPUCloseScreen_KMS(ScreenPtr pScreen)
 	/* Clear mask of assigned crtc's in this generation */
 	pAMDGPUEnt->assigned_crtcs = 0;
 
-	drmmode_terminate_leases(pScrn);
 	drmmode_uevent_fini(pScrn, &info->drmmode);
 	amdgpu_drm_queue_close(pScrn);
 
