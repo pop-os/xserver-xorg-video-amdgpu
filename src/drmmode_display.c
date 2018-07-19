@@ -357,12 +357,8 @@ create_pixmap_for_fbcon(drmmode_ptr drmmode,
 {
 	ScreenPtr pScreen = pScrn->pScreen;
 	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(pScrn);
-	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
-	PixmapPtr pixmap = info->fbcon_pixmap;
+	PixmapPtr pixmap = NULL;
 	drmModeFBPtr fbcon;
-
-	if (pixmap)
-		return pixmap;
 
 	fbcon = drmModeGetFB(pAMDGPUEnt->fd, fbcon_id);
 	if (!fbcon)
@@ -387,7 +383,6 @@ create_pixmap_for_fbcon(drmmode_ptr drmmode,
 		pixmap = NULL;
 	}
 
-	info->fbcon_pixmap = pixmap;
 out_free_fb:
 	drmModeFreeFB(fbcon);
 	return pixmap;
@@ -396,7 +391,6 @@ out_free_fb:
 void drmmode_copy_fb(ScrnInfoPtr pScrn, drmmode_ptr drmmode)
 {
 	xf86CrtcConfigPtr   xf86_config = XF86_CRTC_CONFIG_PTR(pScrn);
-	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
 	ScreenPtr pScreen = pScrn->pScreen;
 	PixmapPtr src, dst = pScreen->GetScreenPixmap(pScreen);
 	struct drmmode_fb *fb = amdgpu_pixmap_get_fb(dst);
@@ -436,10 +430,7 @@ void drmmode_copy_fb(ScrnInfoPtr pScrn, drmmode_ptr drmmode)
 	FreeScratchGC(gc);
 
 	pScreen->canDoBGNoneRoot = TRUE;
-
-	if (info->fbcon_pixmap)
-		pScrn->pScreen->DestroyPixmap(info->fbcon_pixmap);
-	info->fbcon_pixmap = NULL;
+	pScreen->DestroyPixmap(src);
 
 	return;
 }

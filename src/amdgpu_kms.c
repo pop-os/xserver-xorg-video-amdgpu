@@ -125,9 +125,6 @@ static void AMDGPUFreeRec(ScrnInfoPtr pScrn)
 
 	info = AMDGPUPTR(pScrn);
 	if (info) {
-		if (info->fbcon_pixmap)
-			pScrn->pScreen->DestroyPixmap(info->fbcon_pixmap);
-
 		pEnt = info->pEnt;
 		free(pScrn->driverPrivate);
 		pScrn->driverPrivate = NULL;

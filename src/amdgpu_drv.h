@@ -264,7 +264,6 @@ typedef struct {
 	struct amdgpu_dri2 dri2;
 
 	/* accel */
-	PixmapPtr fbcon_pixmap;
 	int callback_event_type;
 	uint_fast32_t gpu_flushed;
 	uint_fast32_t gpu_synced;
