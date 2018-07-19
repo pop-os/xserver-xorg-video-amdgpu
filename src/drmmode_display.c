@@ -3649,13 +3649,18 @@ Bool drmmode_setup_colormap(ScreenPtr pScreen, ScrnInfoPtr pScrn)
 
 			for (i = 0; i < xf86_config->num_crtc; i++) {
 				xf86CrtcPtr crtc = xf86_config->crtc[i];
-				void *gamma = malloc(1024 * 3 * sizeof(CARD16));
+				void *gamma;
 
+				if (crtc->gamma_size == 1024)
+					continue;
+
+				gamma = malloc(1024 * 3 * sizeof(CARD16));
 				if (!gamma) {
 					ErrorF("Failed to allocate gamma LUT memory\n");
 					return FALSE;
 				}
 
+				free(crtc->gamma_red);
 				crtc->gamma_size = 1024;
 				crtc->gamma_red = gamma;
 				crtc->gamma_green = crtc->gamma_red + crtc->gamma_size;
