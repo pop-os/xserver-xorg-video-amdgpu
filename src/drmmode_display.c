@@ -355,13 +355,11 @@ static PixmapPtr
 create_pixmap_for_fbcon(drmmode_ptr drmmode,
 			ScrnInfoPtr pScrn, int fbcon_id)
 {
+	ScreenPtr pScreen = pScrn->pScreen;
 	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(pScrn);
 	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
 	PixmapPtr pixmap = info->fbcon_pixmap;
-	struct amdgpu_buffer *bo;
 	drmModeFBPtr fbcon;
-	struct drm_gem_flink flink;
-	struct amdgpu_bo_import_result import = {0};
 
 	if (pixmap)
 		return pixmap;
@@ -375,36 +373,21 @@ create_pixmap_for_fbcon(drmmode_ptr drmmode,
 	    fbcon->height != pScrn->virtualY)
 		goto out_free_fb;
 
-	flink.handle = fbcon->handle;
-	if (ioctl(pAMDGPUEnt->fd, DRM_IOCTL_GEM_FLINK, &flink) < 0) {
-		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-			   "Couldn't flink fbcon handle\n");
+	pixmap = fbCreatePixmap(pScreen, 0, 0, fbcon->depth, 0);
+	if (!pixmap)
 		goto out_free_fb;
+
+	pScreen->ModifyPixmapHeader(pixmap, fbcon->width, fbcon->height, 0, 0,
+				    fbcon->pitch, NULL);
+	pixmap->devPrivate.ptr = NULL;
+
+	if (!glamor_egl_create_textured_pixmap(pixmap, fbcon->handle,
+					       pixmap->devKind)) {
+		pScreen->DestroyPixmap(pixmap);
+		pixmap = NULL;
 	}
 
-	bo = calloc(1, sizeof(struct amdgpu_buffer));
-	if (!bo) {
-		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-			   "Couldn't allocate bo for fbcon handle\n");
-		goto out_free_fb;
-	}
-	bo->ref_count = 1;
-
-	if (amdgpu_bo_import(pAMDGPUEnt->pDev,
-			     amdgpu_bo_handle_type_gem_flink_name, flink.name,
-			     &import) != 0) {
-		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-			   "Couldn't import BO for fbcon handle\n");
-		goto out_free_bo;
-	}
-	bo->bo.amdgpu = import.buf_handle;
-
-	pixmap = drmmode_create_bo_pixmap(pScrn, fbcon->width, fbcon->height,
-					  fbcon->depth, fbcon->bpp,
-					  fbcon->pitch, bo);
 	info->fbcon_pixmap = pixmap;
-out_free_bo:
-	amdgpu_bo_unref(&bo);
 out_free_fb:
 	drmModeFreeFB(fbcon);
 	return pixmap;
