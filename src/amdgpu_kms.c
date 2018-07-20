@@ -1403,7 +1403,7 @@ Bool AMDGPUPreInit_KMS(ScrnInfoPtr pScrn, int flags)
 	if (!AMDGPUPreInitAccel_KMS(pScrn))
 		return FALSE;
 
-	amdgpu_drm_queue_init();
+	amdgpu_drm_queue_init(pScrn);
 
 	/* don't enable tiling if accel is not enabled */
 	if (info->use_glamor) {

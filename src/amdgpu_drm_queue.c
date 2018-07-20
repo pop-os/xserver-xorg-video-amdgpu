@@ -57,7 +57,7 @@ static uintptr_t amdgpu_drm_queue_seq;
 /*
  * Handle a DRM event
  */
-void
+static void
 amdgpu_drm_queue_handler(int fd, unsigned int frame, unsigned int sec,
 			 unsigned int usec, void *user_ptr)
 {
@@ -181,8 +181,15 @@ amdgpu_drm_abort_id(uint64_t id)
  * Initialize the DRM event queue
  */
 void
-amdgpu_drm_queue_init()
+amdgpu_drm_queue_init(ScrnInfoPtr scrn)
 {
+	AMDGPUInfoPtr info = AMDGPUPTR(scrn);
+	drmmode_ptr drmmode = &info->drmmode;
+
+	drmmode->event_context.version = 2;
+	drmmode->event_context.vblank_handler = amdgpu_drm_queue_handler;
+	drmmode->event_context.page_flip_handler = amdgpu_drm_queue_handler;
+
 	if (amdgpu_drm_queue_refcnt++)
 		return;
 
