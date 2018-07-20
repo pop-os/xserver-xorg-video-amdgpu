@@ -49,6 +49,7 @@ uintptr_t amdgpu_drm_queue_alloc(xf86CrtcPtr crtc, ClientPtr client,
 void amdgpu_drm_abort_client(ClientPtr client);
 void amdgpu_drm_abort_entry(uintptr_t seq);
 void amdgpu_drm_abort_id(uint64_t id);
+void amdgpu_drm_wait_pending_flip(xf86CrtcPtr crtc);
 void amdgpu_drm_queue_init(ScrnInfoPtr scrn);
 void amdgpu_drm_queue_close(ScrnInfoPtr scrn);
 

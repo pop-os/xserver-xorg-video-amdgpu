@@ -178,6 +178,19 @@ amdgpu_drm_abort_id(uint64_t id)
 }
 
 /*
+ * Wait for pending page flip on given CRTC to complete
+ */
+void amdgpu_drm_wait_pending_flip(xf86CrtcPtr crtc)
+{
+	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
+	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(crtc->scrn);
+	drmmode_ptr drmmode = drmmode_crtc->drmmode;
+
+	while (drmmode_crtc->flip_pending &&
+	       drmHandleEvent(pAMDGPUEnt->fd, &drmmode->event_context) > 0);
+}
+
+/*
  * Initialize the DRM event queue
  */
 void
