@@ -128,13 +128,6 @@ typedef struct {
 	/* The FB currently being scanned out by this CRTC, if any */
 	struct drmmode_fb *fb;
 
-#ifdef HAVE_PRESENT_H
-	/* Deferred processing of Present vblank event */
-	uint64_t present_vblank_event_id;
-	uint64_t present_vblank_usec;
-	unsigned present_vblank_msc;
-	Bool present_flip_expected;
-#endif
 	struct drm_color_lut *degamma_lut;
 	struct drm_color_ctm *ctm;
 	struct drm_color_lut *gamma_lut;
