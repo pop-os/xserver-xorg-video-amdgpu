@@ -110,7 +110,7 @@ amdgpu_present_flush_drm_events(ScreenPtr screen)
 	if (r <= 0)
 		return 0;
 
-	return drmHandleEvent(pAMDGPUEnt->fd, &drmmode->event_context) >= 0;
+	return amdgpu_drm_handle_event(pAMDGPUEnt->fd, &drmmode->event_context) >= 0;
 }
 
 /*

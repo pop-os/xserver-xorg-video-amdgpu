@@ -3096,7 +3096,7 @@ drmmode_flip_handler(xf86CrtcPtr crtc, uint32_t frame, uint64_t usec, void *even
 static void drmmode_notify_fd(int fd, int notify, void *data)
 {
 	drmmode_ptr drmmode = data;
-	drmHandleEvent(fd, &drmmode->event_context);
+	amdgpu_drm_handle_event(fd, &drmmode->event_context);
 }
 #else
 static void drm_wakeup_handler(pointer data, int err, pointer p)
@@ -3106,7 +3106,7 @@ static void drm_wakeup_handler(pointer data, int err, pointer p)
 	fd_set *read_mask = p;
 
 	if (err >= 0 && FD_ISSET(pAMDGPUEnt->fd, read_mask)) {
-		drmHandleEvent(pAMDGPUEnt->fd, &drmmode->event_context);
+		amdgpu_drm_handle_event(pAMDGPUEnt->fd, &drmmode->event_context);
 	}
 }
 #endif
