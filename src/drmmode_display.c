@@ -3051,17 +3051,21 @@ drmmode_flip_abort(xf86CrtcPtr crtc, void *event_data)
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
 	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(crtc->scrn);
 	drmmode_flipdata_ptr flipdata = event_data;
+	int crtc_id = drmmode_get_crtc_id(crtc);
+	struct drmmode_fb **fb = &flipdata->fb[crtc_id];
+
+	if (drmmode_crtc->flip_pending == *fb) {
+		drmmode_fb_reference(pAMDGPUEnt->fd, &drmmode_crtc->flip_pending,
+				     NULL);
+	}
+	drmmode_fb_reference(pAMDGPUEnt->fd, fb, NULL);
 
 	if (--flipdata->flip_count == 0) {
 		if (!flipdata->fe_crtc)
 			flipdata->fe_crtc = crtc;
 		flipdata->abort(flipdata->fe_crtc, flipdata->event_data);
-		drmmode_fb_reference(pAMDGPUEnt->fd, &flipdata->fb, NULL);
 		free(flipdata);
 	}
-
-	drmmode_fb_reference(pAMDGPUEnt->fd, &drmmode_crtc->flip_pending,
-			     NULL);
 }
 
 static void
@@ -3070,6 +3074,8 @@ drmmode_flip_handler(xf86CrtcPtr crtc, uint32_t frame, uint64_t usec, void *even
 	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(crtc->scrn);
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
 	drmmode_flipdata_ptr flipdata = event_data;
+	int crtc_id = drmmode_get_crtc_id(crtc);
+	struct drmmode_fb **fb = &flipdata->fb[crtc_id];
 
 	/* Is this the event whose info shall be delivered to higher level? */
 	if (crtc == flipdata->fe_crtc) {
@@ -3078,13 +3084,12 @@ drmmode_flip_handler(xf86CrtcPtr crtc, uint32_t frame, uint64_t usec, void *even
 		flipdata->fe_usec = usec;
 	}
 
-	drmmode_fb_reference(pAMDGPUEnt->fd, &drmmode_crtc->fb,
-			     flipdata->fb);
-	if (drmmode_crtc->tear_free ||
-	    drmmode_crtc->flip_pending == flipdata->fb) {
+	if (drmmode_crtc->flip_pending == *fb) {
 		drmmode_fb_reference(pAMDGPUEnt->fd,
 				     &drmmode_crtc->flip_pending, NULL);
 	}
+	drmmode_fb_reference(pAMDGPUEnt->fd, &drmmode_crtc->fb, *fb);
+	drmmode_fb_reference(pAMDGPUEnt->fd, fb, NULL);
 
 	if (--flipdata->flip_count == 0) {
 		/* Deliver MSC & UST from reference/current CRTC to flip event
@@ -3096,7 +3101,6 @@ drmmode_flip_handler(xf86CrtcPtr crtc, uint32_t frame, uint64_t usec, void *even
 		else
 			flipdata->handler(crtc, frame, usec, flipdata->event_data);
 
-		drmmode_fb_reference(pAMDGPUEnt->fd, &flipdata->fb, NULL);
 		free(flipdata);
 	}
 }
@@ -3875,21 +3879,22 @@ Bool amdgpu_do_pageflip(ScrnInfoPtr scrn, ClientPtr client,
 	xf86CrtcConfigPtr config = XF86_CRTC_CONFIG_PTR(scrn);
 	xf86CrtcPtr crtc = NULL;
 	drmmode_crtc_private_ptr drmmode_crtc = config->crtc[0]->driver_private;
-	int i;
 	uint32_t flip_flags = flip_sync == FLIP_ASYNC ? DRM_MODE_PAGE_FLIP_ASYNC : 0;
 	drmmode_flipdata_ptr flipdata;
 	uintptr_t drm_queue_seq = 0;
+	struct drmmode_fb *fb;
+	int i = 0;
 
-	flipdata = calloc(1, sizeof(drmmode_flipdata_rec));
+	flipdata = calloc(1, sizeof(*flipdata) + config->num_crtc *
+			  sizeof(flipdata->fb[0]));
 	if (!flipdata) {
 		xf86DrvMsg(scrn->scrnIndex, X_WARNING,
 			   "flip queue: data alloc failed.\n");
 		goto error;
 	}
 
-	drmmode_fb_reference(pAMDGPUEnt->fd, &flipdata->fb,
-			     amdgpu_pixmap_get_fb(new_front));
-	if (!flipdata->fb) {
+	fb = amdgpu_pixmap_get_fb(new_front);
+	if (!fb) {
 		ErrorF("Failed to get FB for flip\n");
 		goto error;
 	}
@@ -3910,8 +3915,6 @@ Bool amdgpu_do_pageflip(ScrnInfoPtr scrn, ClientPtr client,
 	flipdata->fe_crtc = ref_crtc;
 
 	for (i = 0; i < config->num_crtc; i++) {
-		struct drmmode_fb *fb = flipdata->fb;
-
 		crtc = config->crtc[i];
 		drmmode_crtc = crtc->driver_private;
 
@@ -3947,8 +3950,9 @@ Bool amdgpu_do_pageflip(ScrnInfoPtr scrn, ClientPtr client,
 				goto next;
 			}
 
-			fb = amdgpu_pixmap_get_fb(drmmode_crtc->scanout[scanout_id].pixmap);
-			if (!fb) {
+			drmmode_fb_reference(pAMDGPUEnt->fd, &flipdata->fb[i],
+					     amdgpu_pixmap_get_fb(drmmode_crtc->scanout[scanout_id].pixmap));
+			if (!flipdata->fb[i]) {
 				ErrorF("Failed to get FB for TearFree flip\n");
 				goto error;
 			}
@@ -3963,6 +3967,8 @@ Bool amdgpu_do_pageflip(ScrnInfoPtr scrn, ClientPtr client,
 				amdgpu_drm_abort_entry(drmmode_crtc->scanout_update_pending);
 				drmmode_crtc->scanout_update_pending = 0;
 			}
+		} else {
+			drmmode_fb_reference(pAMDGPUEnt->fd, &flipdata->fb[i], fb);
 		}
 
 		if (crtc == ref_crtc) {
@@ -3988,8 +3994,8 @@ Bool amdgpu_do_pageflip(ScrnInfoPtr scrn, ClientPtr client,
 		}
 
 	next:
-		drmmode_fb_reference(pAMDGPUEnt->fd,
-				     &drmmode_crtc->flip_pending, fb);
+		drmmode_fb_reference(pAMDGPUEnt->fd, &drmmode_crtc->flip_pending,
+				     flipdata->fb[i]);
 		drm_queue_seq = 0;
 	}
 
@@ -4007,7 +4013,6 @@ error:
 		drmmode_flip_abort(crtc, flipdata);
 	else {
 		abort(NULL, data);
-		drmmode_fb_reference(pAMDGPUEnt->fd, &flipdata->fb, NULL);
 		free(flipdata);
 	}
 

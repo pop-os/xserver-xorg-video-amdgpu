@@ -74,7 +74,6 @@ typedef struct {
 } drmmode_rec, *drmmode_ptr;
 
 typedef struct {
-	struct drmmode_fb *fb;
 	void *event_data;
 	int flip_count;
 	unsigned int fe_frame;
@@ -82,6 +81,7 @@ typedef struct {
 	xf86CrtcPtr fe_crtc;
 	amdgpu_drm_handler_proc handler;
 	amdgpu_drm_abort_proc abort;
+	struct drmmode_fb *fb[0];
 } drmmode_flipdata_rec, *drmmode_flipdata_ptr;
 
 struct drmmode_fb {
