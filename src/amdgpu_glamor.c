@@ -99,6 +99,14 @@ Bool amdgpu_glamor_pre_init(ScrnInfoPtr scrn)
 		} else {
 			AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(scrn);
 
+			if (scrn->depth == 30 &&
+			    version < MODULE_VERSION_NUMERIC(1, 0, 1)) {
+				xf86DrvMsg(scrn->scrnIndex, X_WARNING,
+					   "Depth 30 requires glamor >= 1.0.1 (xserver 1.20),"
+					   " can't enable glamor\n");
+				return FALSE;
+			}
+
 			if (glamor_egl_init(scrn, pAMDGPUEnt->fd)) {
 				xf86DrvMsg(scrn->scrnIndex, X_INFO,
 					   "glamor detected, initialising EGL layer.\n");

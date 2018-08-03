@@ -1168,14 +1168,6 @@ static Bool AMDGPUPreInitAccel_KMS(ScrnInfoPtr pScrn)
 			use_glamor = FALSE;
 #endif
 
-		if (pScrn->depth == 30 && use_glamor &&
-		    xorgGetVersion() < XORG_VERSION_NUMERIC(1,19,99,1,0)) {
-			xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
-				   "Depth 30 is not supported by GLAMOR with "
-				   "Xorg < 1.19.99.1\n");
-			goto shadowfb;
-		}
-
 #ifdef DRI2
 		info->dri2.available = ! !xf86LoadSubModule(pScrn, "dri2");
 #endif
@@ -1184,16 +1176,20 @@ static Bool AMDGPUPreInitAccel_KMS(ScrnInfoPtr pScrn)
 			info->gbm = gbm_create_device(pAMDGPUEnt->fd);
 
 		if (info->gbm) {
-			if (!use_glamor ||
-			    amdgpu_glamor_pre_init(pScrn))
-				return TRUE;
+			if (use_glamor) {
+				if (amdgpu_glamor_pre_init(pScrn))
+					return TRUE;
+
+				xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
+					   "amdgpu_glamor_pre_init returned "
+					   "FALSE, using ShadowFB\n");
+			}
 		} else {
 			xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
 				   "gbm_create_device returned NULL, using "
 				   "ShadowFB\n");
 		}
 	} else {
-shadowfb:
 		xf86DrvMsg(pScrn->scrnIndex, X_CONFIG,
 			   "GPU acceleration disabled, using ShadowFB\n");
 	}
