@@ -3958,7 +3958,7 @@ Bool amdgpu_do_pageflip(ScrnInfoPtr scrn, ClientPtr client,
 		if (crtc == ref_crtc) {
 			if (drmmode_page_flip_target_absolute(pAMDGPUEnt,
 							      drmmode_crtc,
-							      fb->handle,
+							      flipdata->fb[i]->handle,
 							      flip_flags,
 							      drm_queue_seq,
 							      target_msc) != 0)
@@ -3966,7 +3966,7 @@ Bool amdgpu_do_pageflip(ScrnInfoPtr scrn, ClientPtr client,
 		} else {
 			if (drmmode_page_flip_target_relative(pAMDGPUEnt,
 							      drmmode_crtc,
-							      fb->handle,
+							      flipdata->fb[i]->handle,
 							      flip_flags,
 							      drm_queue_seq, 0) != 0)
 				goto flip_error;
