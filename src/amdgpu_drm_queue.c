@@ -284,7 +284,8 @@ void amdgpu_drm_wait_pending_flip(xf86CrtcPtr crtc)
 
 	drmmode_crtc->wait_flip_nesting_level++;
 
-	while (!xorg_list_is_empty(&amdgpu_drm_flip_signalled)) {
+	while (drmmode_crtc->flip_pending &&
+	       !xorg_list_is_empty(&amdgpu_drm_flip_signalled)) {
 		e = xorg_list_first_entry(&amdgpu_drm_flip_signalled,
 					  struct amdgpu_drm_queue_entry, list);
 		amdgpu_drm_queue_handle_one(e);
