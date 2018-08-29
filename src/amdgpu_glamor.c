@@ -384,6 +384,7 @@ amdgpu_glamor_set_shared_pixmap_backing(PixmapPtr pixmap, void *handle)
 {
 	ScreenPtr screen = pixmap->drawable.pScreen;
 	ScrnInfoPtr scrn = xf86ScreenToScrn(screen);
+	int ihandle = (int)(long)handle;
 	struct amdgpu_pixmap *priv;
 
 	if (!amdgpu_set_shared_pixmap_backing(pixmap, handle))
@@ -391,7 +392,8 @@ amdgpu_glamor_set_shared_pixmap_backing(PixmapPtr pixmap, void *handle)
 
 	priv = amdgpu_get_pixmap_private(pixmap);
 
-	if (!amdgpu_glamor_create_textured_pixmap(pixmap, priv->bo)) {
+	if (ihandle != -1 &&
+	    !amdgpu_glamor_create_textured_pixmap(pixmap, priv->bo)) {
 		xf86DrvMsg(scrn->scrnIndex, X_ERROR,
 			   "Failed to get PRIME drawable for glamor pixmap.\n");
 		return FALSE;
