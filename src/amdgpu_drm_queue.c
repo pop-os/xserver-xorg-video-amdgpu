@@ -257,8 +257,11 @@ amdgpu_drm_handle_event(int fd, drmEventContext *event_context)
 
 	r = drmHandleEvent(fd, event_context);
 
-	xorg_list_for_each_entry_safe(e, tmp, &amdgpu_drm_flip_signalled, list)
+	while (!xorg_list_is_empty(&amdgpu_drm_flip_signalled)) {
+		e = xorg_list_first_entry(&amdgpu_drm_flip_signalled,
+					  struct amdgpu_drm_queue_entry, list);
 		amdgpu_drm_queue_handle_one(e);
+	}
 
 	xorg_list_for_each_entry_safe(e, tmp, &amdgpu_drm_vblank_signalled, list) {
 		drmmode_crtc_private_ptr drmmode_crtc = e->crtc->driver_private;
@@ -277,12 +280,15 @@ void amdgpu_drm_wait_pending_flip(xf86CrtcPtr crtc)
 {
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
 	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(crtc->scrn);
-	struct amdgpu_drm_queue_entry *e, *tmp;
+	struct amdgpu_drm_queue_entry *e;
 
 	drmmode_crtc->wait_flip_nesting_level++;
 
-	xorg_list_for_each_entry_safe(e, tmp, &amdgpu_drm_flip_signalled, list)
+	while (!xorg_list_is_empty(&amdgpu_drm_flip_signalled)) {
+		e = xorg_list_first_entry(&amdgpu_drm_flip_signalled,
+					  struct amdgpu_drm_queue_entry, list);
 		amdgpu_drm_queue_handle_one(e);
+	}
 
 	while (drmmode_crtc->flip_pending
 	       && amdgpu_drm_handle_event(pAMDGPUEnt->fd,
