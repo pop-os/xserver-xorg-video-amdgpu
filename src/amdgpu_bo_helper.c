@@ -400,6 +400,9 @@ Bool amdgpu_set_shared_pixmap_backing(PixmapPtr ppix, void *fd_handle)
 	uint32_t size = ppix->devKind * ppix->drawable.height;
 	Bool ret;
 
+	if (ihandle == -1)
+		return amdgpu_set_pixmap_bo(ppix, NULL);
+
 	if (info->gbm) {
 		struct amdgpu_buffer *bo;
 		struct gbm_import_fd_data data;
