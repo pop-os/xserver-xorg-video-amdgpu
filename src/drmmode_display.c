@@ -3198,6 +3198,9 @@ static void drmmode_cm_init(int drm_fd, drmmode_ptr drmmode,
 	memset(drmmode->cm_prop_ids, 0, sizeof(drmmode->cm_prop_ids));
 	drmmode->gamma_lut_size = drmmode->degamma_lut_size = 0;
 
+	if (!mode_res->crtcs)
+		return;
+
 	/* AMD hardware has color management support on all pipes. It is
 	 * therefore sufficient to only check the first CRTC.
 	 */
