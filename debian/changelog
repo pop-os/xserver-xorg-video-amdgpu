@@ -1,6 +1,7 @@
-xserver-xorg-video-amdgpu (18.0.1-2) UNRELEASED; urgency=medium
+xserver-xorg-video-amdgpu (18.1.0-1) UNRELEASED; urgency=medium
 
   * Switch to dbgsym package.
+  * New upstream release.
 
  -- Timo Aaltonen <tjaalton@debian.org>  Wed, 27 Jun 2018 12:40:28 +0300
 
