@@ -2,6 +2,7 @@ xserver-xorg-video-amdgpu (18.1.0-1) UNRELEASED; urgency=medium
 
   * Switch to dbgsym package.
   * New upstream release.
+  * control: Build-depend on x11proto-dev.
 
  -- Timo Aaltonen <tjaalton@debian.org>  Wed, 27 Jun 2018 12:40:28 +0300
 
