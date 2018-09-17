@@ -125,9 +125,6 @@ static void AMDGPUFreeRec(ScrnInfoPtr pScrn)
 
 	info = AMDGPUPTR(pScrn);
 	if (info) {
-		if (info->fbcon_pixmap)
-			pScrn->pScreen->DestroyPixmap(info->fbcon_pixmap);
-
 		pEnt = info->pEnt;
 		free(pScrn->driverPrivate);
 		pScrn->driverPrivate = NULL;
@@ -424,7 +421,7 @@ amdgpu_scanout_flip_abort(xf86CrtcPtr crtc, void *event_data)
 	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(crtc->scrn);
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
 
-	drmmode_crtc->scanout_update_pending = FALSE;
+	drmmode_crtc->scanout_update_pending = 0;
 	drmmode_fb_reference(pAMDGPUEnt->fd, &drmmode_crtc->flip_pending,
 			     NULL);
 }
@@ -439,15 +436,6 @@ amdgpu_scanout_flip_handler(xf86CrtcPtr crtc, uint32_t msc, uint64_t usec,
 	drmmode_fb_reference(pAMDGPUEnt->fd, &drmmode_crtc->fb,
 			     drmmode_crtc->flip_pending);
 	amdgpu_scanout_flip_abort(crtc, event_data);
-
-#ifdef HAVE_PRESENT_H
-	if (drmmode_crtc->present_vblank_event_id) {
-		present_event_notify(drmmode_crtc->present_vblank_event_id,
-				     drmmode_crtc->present_vblank_usec,
-				     drmmode_crtc->present_vblank_msc);
-		drmmode_crtc->present_vblank_event_id = 0;
-	}
-#endif
 }
 
 
@@ -509,7 +497,7 @@ amdgpu_prime_scanout_update_abort(xf86CrtcPtr crtc, void *event_data)
 {
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
 
-	drmmode_crtc->scanout_update_pending = FALSE;
+	drmmode_crtc->scanout_update_pending = 0;
 }
 
 void
@@ -650,7 +638,7 @@ amdgpu_prime_scanout_update_handler(xf86CrtcPtr crtc, uint32_t frame, uint64_t u
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
 
 	amdgpu_prime_scanout_do_update(crtc, 0);
-	drmmode_crtc->scanout_update_pending = FALSE;
+	drmmode_crtc->scanout_update_pending = 0;
 }
 
 static void
@@ -691,7 +679,7 @@ amdgpu_prime_scanout_update(PixmapDirtyUpdatePtr dirty)
 		return;
 	}
 
-	drmmode_crtc->scanout_update_pending = TRUE;
+	drmmode_crtc->scanout_update_pending = drm_queue_seq;
 }
 
 static void
@@ -749,7 +737,7 @@ amdgpu_prime_scanout_flip(PixmapDirtyUpdatePtr ent)
 	}
 
 	drmmode_crtc->scanout_id = scanout_id;
-	drmmode_crtc->scanout_update_pending = TRUE;
+	drmmode_crtc->scanout_update_pending = drm_queue_seq;
 }
 
 static void
@@ -882,8 +870,6 @@ amdgpu_scanout_do_update(xf86CrtcPtr xf86_crtc, int scanout_id,
 		FreeScratchGC(gc);
 	}
 
-	amdgpu_glamor_flush(xf86_crtc->scrn);
-
 	return TRUE;
 }
 
@@ -892,7 +878,7 @@ amdgpu_scanout_update_abort(xf86CrtcPtr crtc, void *event_data)
 {
 	drmmode_crtc_private_ptr drmmode_crtc = event_data;
 
-	drmmode_crtc->scanout_update_pending = FALSE;
+	drmmode_crtc->scanout_update_pending = 0;
 }
 
 static void
@@ -908,8 +894,10 @@ amdgpu_scanout_update_handler(xf86CrtcPtr crtc, uint32_t frame, uint64_t usec,
 	    drmmode_crtc->dpms_mode == DPMSModeOn) {
 		if (amdgpu_scanout_do_update(crtc, drmmode_crtc->scanout_id,
 					     screen->GetWindowPixmap(screen->root),
-					     region->extents))
+					     region->extents)) {
+			amdgpu_glamor_flush(crtc->scrn);
 			RegionEmpty(region);
+		}
 	}
 
 	amdgpu_scanout_update_abort(crtc, event_data);
@@ -967,7 +955,7 @@ amdgpu_scanout_update(xf86CrtcPtr xf86_crtc)
 		return;
 	}
 
-	drmmode_crtc->scanout_update_pending = TRUE;
+	drmmode_crtc->scanout_update_pending = drm_queue_seq;
 }
 
 static void
@@ -991,6 +979,8 @@ amdgpu_scanout_flip(ScreenPtr pScreen, AMDGPUInfoPtr info,
 				      pScreen->GetWindowPixmap(pScreen->root),
 				      region->extents))
 		return;
+
+	amdgpu_glamor_flush(scrn);
 	RegionEmpty(region);
 
 	drm_queue_seq = amdgpu_drm_queue_alloc(xf86_crtc,
@@ -1032,7 +1022,7 @@ amdgpu_scanout_flip(ScreenPtr pScreen, AMDGPUInfoPtr info,
 	}
 
 	drmmode_crtc->scanout_id = scanout_id;
-	drmmode_crtc->scanout_update_pending = TRUE;
+	drmmode_crtc->scanout_update_pending = drm_queue_seq;
 }
 
 static void AMDGPUBlockHandler_KMS(BLOCKHANDLER_ARGS_DECL)
@@ -1054,6 +1044,9 @@ static void AMDGPUBlockHandler_KMS(BLOCKHANDLER_ARGS_DECL)
 		for (c = 0; c < xf86_config->num_crtc; c++) {
 			xf86CrtcPtr crtc = xf86_config->crtc[c];
 			drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
+
+			if (drmmode_crtc->rotate.pixmap)
+				continue;
 
 			if (drmmode_crtc->tear_free)
 				amdgpu_scanout_flip(pScreen, info, crtc);
@@ -1166,14 +1159,6 @@ static Bool AMDGPUPreInitAccel_KMS(ScrnInfoPtr pScrn)
 			use_glamor = FALSE;
 #endif
 
-		if (pScrn->depth == 30 && use_glamor &&
-		    xorgGetVersion() < XORG_VERSION_NUMERIC(1,19,99,1,0)) {
-			xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
-				   "Depth 30 is not supported by GLAMOR with "
-				   "Xorg < 1.19.99.1\n");
-			goto shadowfb;
-		}
-
 #ifdef DRI2
 		info->dri2.available = ! !xf86LoadSubModule(pScrn, "dri2");
 #endif
@@ -1182,16 +1167,20 @@ static Bool AMDGPUPreInitAccel_KMS(ScrnInfoPtr pScrn)
 			info->gbm = gbm_create_device(pAMDGPUEnt->fd);
 
 		if (info->gbm) {
-			if (!use_glamor ||
-			    amdgpu_glamor_pre_init(pScrn))
-				return TRUE;
+			if (use_glamor) {
+				if (amdgpu_glamor_pre_init(pScrn))
+					return TRUE;
+
+				xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
+					   "amdgpu_glamor_pre_init returned "
+					   "FALSE, using ShadowFB\n");
+			}
 		} else {
 			xf86DrvMsg(pScrn->scrnIndex, X_WARNING,
 				   "gbm_create_device returned NULL, using "
 				   "ShadowFB\n");
 		}
 	} else {
-shadowfb:
 		xf86DrvMsg(pScrn->scrnIndex, X_CONFIG,
 			   "GPU acceleration disabled, using ShadowFB\n");
 	}
@@ -1397,12 +1386,6 @@ Bool AMDGPUPreInit_KMS(ScrnInfoPtr pScrn, int flags)
 
 	info->dri2.available = FALSE;
 	info->dri2.enabled = FALSE;
-	info->dri2.pKernelDRMVersion = drmGetVersion(pAMDGPUEnt->fd);
-	if (info->dri2.pKernelDRMVersion == NULL) {
-		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-			   "AMDGPUDRIGetVersion failed to get the DRM version\n");
-		return FALSE;
-	}
 
 	/* Get ScreenInit function */
 	if (!xf86LoadSubModule(pScrn, "fb"))
@@ -1411,7 +1394,7 @@ Bool AMDGPUPreInit_KMS(ScrnInfoPtr pScrn, int flags)
 	if (!AMDGPUPreInitAccel_KMS(pScrn))
 		return FALSE;
 
-	amdgpu_drm_queue_init();
+	amdgpu_drm_queue_init(pScrn);
 
 	/* don't enable tiling if accel is not enabled */
 	if (info->use_glamor) {
@@ -1514,7 +1497,7 @@ Bool AMDGPUPreInit_KMS(ScrnInfoPtr pScrn, int flags)
 			return FALSE;
 	}
 
-	if (pScrn->modes == NULL
+	if (!pScrn->modes
 #ifdef XSERVER_PLATFORM_BUS
 	    && !pScrn->is_gpu
 #endif
@@ -1784,7 +1767,7 @@ Bool AMDGPUScreenInit_KMS(ScreenPtr pScreen, int argc, char **argv)
 		info->fb_shadow = calloc(1,
 					 pScrn->displayWidth * pScrn->virtualY *
 					 ((pScrn->bitsPerPixel + 7) >> 3));
-		if (info->fb_shadow == NULL) {
+		if (!info->fb_shadow) {
 			xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
 				   "Failed to allocate shadow framebuffer\n");
 			return FALSE;
@@ -2163,7 +2146,7 @@ static Bool amdgpu_setup_kernel_mem(ScreenPtr pScreen)
 	cursor_size = AMDGPU_ALIGN(cursor_size, AMDGPU_GPU_PAGE_SIZE);
 	for (c = 0; c < xf86_config->num_crtc; c++) {
 		/* cursor objects */
-		if (info->cursor_buffer[c] == NULL) {
+		if (!info->cursor_buffer[c]) {
 			if (info->gbm) {
 				info->cursor_buffer[c] = (struct amdgpu_buffer *)calloc(1, sizeof(struct amdgpu_buffer));
 				if (!info->cursor_buffer[c]) {
@@ -2205,7 +2188,7 @@ static Bool amdgpu_setup_kernel_mem(ScreenPtr pScreen)
 		}
 	}
 
-	if (info->front_buffer == NULL) {
+	if (!info->front_buffer) {
 		int pitch;
 		int hint = 0;
 
