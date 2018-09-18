@@ -4,8 +4,7 @@ Priority: optional
 Maintainer: Debian X Strike Force <debian-x@lists.debian.org>
 Uploaders: Timo Aaltonen <tjaalton@debian.org>
 Build-Depends:
- debhelper (>= 9),
- dh-autoreconf,
+ debhelper (>= 11),
  quilt,
  libdrm-dev (>= 2.4.89) [!hurd-i386],
  libgl1-mesa-dev | libgl-dev,

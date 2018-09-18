@@ -4,6 +4,7 @@ xserver-xorg-video-amdgpu (18.1.0-1) UNRELEASED; urgency=medium
   * New upstream release.
   * control: Build-depend on x11proto-dev.
   * control: Bump libdrm build-dep.
+  * Bump debhelper to 11.
 
  -- Timo Aaltonen <tjaalton@debian.org>  Wed, 27 Jun 2018 12:40:28 +0300
 

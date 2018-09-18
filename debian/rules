@@ -17,7 +17,10 @@ override_dh_auto_install:
 # Kill *.la files, and forget no-one:
 override_dh_install:
 	find debian/tmp -name '*.la' -delete
-	dh_install --fail-missing
+	dh_install
+
+override_dh_missing:
+	dh_missing --fail-missing
 
 # Debug packages:
 override_dh_strip:
@@ -28,8 +31,4 @@ override_dh_shlibdeps:
 	dh_shlibdeps -- --warnings=6
 
 %:
-	dh $@ --with quilt,autoreconf,xsf --builddirectory=build/ --parallel
-
-
-
-
+	dh $@ --with quilt,xsf --builddirectory=build/
