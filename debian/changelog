@@ -1,4 +1,4 @@
-xserver-xorg-video-amdgpu (18.1.0-1) UNRELEASED; urgency=medium
+xserver-xorg-video-amdgpu (18.1.0-1) unstable; urgency=medium
 
   * Switch to dbgsym package.
   * New upstream release.
@@ -7,7 +7,7 @@ xserver-xorg-video-amdgpu (18.1.0-1) UNRELEASED; urgency=medium
   * Bump debhelper to 11.
   * control: Bump policy to 4.2.1.
 
- -- Timo Aaltonen <tjaalton@debian.org>  Wed, 27 Jun 2018 12:40:28 +0300
+ -- Timo Aaltonen <tjaalton@debian.org>  Tue, 18 Sep 2018 10:23:52 +0300
 
 xserver-xorg-video-amdgpu (18.0.1-1) unstable; urgency=medium
 
