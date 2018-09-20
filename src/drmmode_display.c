@@ -448,8 +448,17 @@ drmmode_crtc_scanout_destroy(drmmode_ptr drmmode,
 }
 
 void
-drmmode_crtc_scanout_free(drmmode_crtc_private_ptr drmmode_crtc)
+drmmode_crtc_scanout_free(xf86CrtcPtr crtc)
 {
+	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
+
+	if (drmmode_crtc->scanout_update_pending) {
+		amdgpu_drm_wait_pending_flip(crtc);
+		amdgpu_drm_abort_entry(drmmode_crtc->scanout_update_pending);
+		drmmode_crtc->scanout_update_pending = 0;
+		amdgpu_drm_queue_handle_deferred(crtc);
+	}
+
 	drmmode_crtc_scanout_destroy(drmmode_crtc->drmmode,
 				     &drmmode_crtc->scanout[0]);
 	drmmode_crtc_scanout_destroy(drmmode_crtc->drmmode,
@@ -1410,9 +1419,7 @@ done:
 		if (drmmode_crtc->scanout[scanout_id].pixmap &&
 		    fb != amdgpu_pixmap_get_fb(drmmode_crtc->
 					       scanout[scanout_id].pixmap)) {
-			amdgpu_drm_abort_entry(drmmode_crtc->scanout_update_pending);
-			drmmode_crtc->scanout_update_pending = 0;
-			drmmode_crtc_scanout_free(drmmode_crtc);
+			drmmode_crtc_scanout_free(crtc);
 		} else if (!drmmode_crtc->tear_free) {
 			drmmode_crtc_scanout_destroy(drmmode,
 						     &drmmode_crtc->scanout[1]);
@@ -1737,7 +1744,7 @@ static Bool drmmode_set_scanout_pixmap(xf86CrtcPtr crtc, PixmapPtr ppix)
 		}
 	}
 
-	drmmode_crtc_scanout_free(drmmode_crtc);
+	drmmode_crtc_scanout_free(crtc);
 	drmmode_crtc->prime_scanout_pixmap = NULL;
 
 	if (!ppix)
@@ -1752,7 +1759,7 @@ static Bool drmmode_set_scanout_pixmap(xf86CrtcPtr crtc, PixmapPtr ppix)
 	    !drmmode_crtc_scanout_create(crtc, &drmmode_crtc->scanout[1],
 					 ppix->drawable.width,
 					 ppix->drawable.height)) {
-		drmmode_crtc_scanout_free(drmmode_crtc);
+		drmmode_crtc_scanout_free(crtc);
 		return FALSE;
 	}
 
@@ -3345,6 +3352,9 @@ void drmmode_fini(ScrnInfoPtr pScrn, drmmode_ptr drmmode)
 	if (!info->drmmode_inited)
 		return;
 
+	for (c = 0; c < config->num_crtc; c++)
+		drmmode_crtc_scanout_free(config->crtc[c]);
+
 	if (pAMDGPUEnt->fd_wakeup_registered == serverGeneration &&
 	    !--pAMDGPUEnt->fd_wakeup_ref) {
 #if HAVE_NOTIFY_FD
@@ -3355,9 +3365,6 @@ void drmmode_fini(ScrnInfoPtr pScrn, drmmode_ptr drmmode)
 					     drm_wakeup_handler, drmmode);
 #endif
 	}
-
-	for (c = 0; c < config->num_crtc; c++)
-		drmmode_crtc_scanout_free(config->crtc[c]->driver_private);
 }
 
 static void drmmode_sprite_do_set_cursor(struct amdgpu_device_priv *device_priv,
