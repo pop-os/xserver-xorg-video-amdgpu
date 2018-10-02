@@ -1200,7 +1200,7 @@ static Bool AMDGPUPreInitChipType_KMS(ScrnInfoPtr pScrn,
 	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(pScrn);
 
 	info->Chipset = info->PciInfo->device_id;
-	pScrn->chipset = amdgpu_get_marketing_name(pAMDGPUEnt->pDev);
+	pScrn->chipset = (char*)amdgpu_get_marketing_name(pAMDGPUEnt->pDev);
 	if (!pScrn->chipset)
 		pScrn->chipset = "Unknown AMD Radeon GPU";
 
