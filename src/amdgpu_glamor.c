@@ -28,6 +28,8 @@
 #include "config.h"
 #endif
 
+#ifdef USE_GLAMOR
+
 #include <xf86.h>
 
 #include "amdgpu_bo_helper.h"
@@ -517,3 +519,5 @@ XF86VideoAdaptorPtr amdgpu_glamor_xv_init(ScreenPtr pScreen, int num_adapt)
 {
 	return glamor_xv_init(pScreen, num_adapt);
 }
+
+#endif /* USE_GLAMOR */
