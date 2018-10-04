@@ -62,6 +62,7 @@
 
 #include <gbm.h>
 
+static DevPrivateKeyRec amdgpu_window_private_key;
 static DevScreenPrivateKeyRec amdgpu_client_private_key;
 DevScreenPrivateKeyRec amdgpu_device_private_key;
 
@@ -79,6 +80,7 @@ const OptionInfoRec AMDGPUOptions_KMS[] = {
 	{OPTION_SHADOW_PRIMARY, "ShadowPrimary", OPTV_BOOLEAN, {0}, FALSE},
 	{OPTION_TEAR_FREE, "TearFree", OPTV_BOOLEAN, {0}, FALSE},
 	{OPTION_DELETE_DP12, "DeleteUnusedDP12Displays", OPTV_BOOLEAN, {0}, FALSE},
+	{OPTION_VARIABLE_REFRESH, "VariableRefresh", OPTV_BOOLEAN, {0}, FALSE },
 	{-1, NULL, OPTV_NONE, {0}, FALSE}
 };
 
@@ -154,6 +156,58 @@ static void AMDGPUFreeRec(ScrnInfoPtr pScrn)
 	free(pEnt);
 }
 
+
+static inline struct amdgpu_window_priv *get_window_priv(WindowPtr win) {
+	return dixLookupPrivate(&win->devPrivates, &amdgpu_window_private_key);
+}
+
+static void
+amdgpu_property_notify(ClientPtr client,
+		       XID id,
+		       int state,
+		       ATOM property_name)
+{
+	WindowPtr win;
+	PropertyPtr prop;
+	struct amdgpu_window_priv *priv;
+	const char* str;
+	int res;
+
+	res = dixLookupWindow(&win, id, client, DixReadAccess);
+	if (res != Success)
+		return;
+
+	str = NameForAtom(property_name);
+	if (str == NULL)
+		return;
+
+	if (strcmp(str, "_VARIABLE_REFRESH") != 0)
+		return;
+
+	priv = get_window_priv(win);
+	if (!priv)
+		return;
+
+	priv->variable_refresh = 0;
+
+	res = dixLookupProperty(&prop,
+				win,
+				property_name,
+				client,
+				DixReadAccess);
+
+	if (res == Success && prop->format == 32 && prop->size == 1) {
+		uint32_t value = *(uint32_t*)prop->data;
+		priv->variable_refresh = (value != 0);
+	}
+}
+
+Bool amdgpu_window_has_variable_refresh(WindowPtr win) {
+	struct amdgpu_window_priv *priv = get_window_priv(win);
+
+	return priv->variable_refresh;
+}
+
 static void *amdgpuShadowWindow(ScreenPtr screen, CARD32 row, CARD32 offset,
 				int mode, CARD32 * size, void *closure)
 {
@@ -194,6 +248,17 @@ amdgpu_event_callback(CallbackListPtr *list,
 				       &amdgpu_client_private_key, pScreen);
 	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
 	int i;
+
+	if (info->vrr_support) {
+		for (i = 0; i < eventinfo->count; i++) {
+			xEventPtr ev = &eventinfo->events[i];
+			if (ev->u.u.type == PropertyNotify)
+				amdgpu_property_notify(eventinfo->client,
+						       ev->u.property.window,
+						       ev->u.property.state,
+						       ev->u.property.atom);
+		}
+	}
 
 	if (callback_needs_flush(info, client_priv) ||
 	    callback_needs_flush(info, server_priv))
@@ -299,6 +364,11 @@ static Bool AMDGPUCreateScreenResources_KMS(ScreenPtr pScreen)
 			return FALSE;
 		}
 	}
+
+	if (!dixRegisterPrivateKey(&amdgpu_window_private_key,
+				   PRIVATE_WINDOW,
+				   sizeof(struct amdgpu_window_priv)))
+		return FALSE;
 
 	return TRUE;
 }
@@ -1415,6 +1485,12 @@ Bool AMDGPUPreInit_KMS(ScrnInfoPtr pScrn, int flags)
 
 		if (info->shadow_primary)
 			xf86DrvMsg(pScrn->scrnIndex, X_CONFIG, "ShadowPrimary enabled\n");
+
+		from = xf86GetOptValBool(info->Options, OPTION_VARIABLE_REFRESH,
+					 &info->vrr_support) ? X_CONFIG : X_DEFAULT;
+
+		xf86DrvMsg(pScrn->scrnIndex, from, "VariableRefresh: %sabled\n",
+			   info->vrr_support ? "en" : "dis");
 	}
 
 	if (!pScrn->is_gpu) {

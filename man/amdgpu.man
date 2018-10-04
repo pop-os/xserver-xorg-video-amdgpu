@@ -83,6 +83,13 @@ accordingly. If this option isn't set, the default value of the property is
 which means that TearFree is on for rotated outputs, outputs with RandR
 transforms applied and for RandR 1.4 slave outputs, otherwise off.
 .TP
+.BI "Option \*qVariableRefresh\*q \*q" boolean \*q
+Enables support for enabling variable refresh on the Screen's CRTCs
+when an suitable application is flipping via the Present extension.
+.br
+The default is
+.B off.
+.TP
 .BI "Option \*qAccelMethod\*q \*q" string \*q
 Setting this option to
 .B none

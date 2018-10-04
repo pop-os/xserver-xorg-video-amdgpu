@@ -65,6 +65,8 @@ typedef struct {
 
 	Bool dri2_flipping;
 	Bool present_flipping;
+	Bool vrr_flipping;
+	uint32_t vrr_prop_id;
 
 	/* Cache for DRM property type IDs for CRTC color management */
 	uint32_t cm_prop_ids[CM_NUM_PROPS];
@@ -108,6 +110,7 @@ typedef struct {
 	unsigned scanout_id;
 	uintptr_t scanout_update_pending;
 	Bool tear_free;
+	Bool vrr_enabled;
 
 	PixmapPtr prime_scanout_pixmap;
 
@@ -255,6 +258,7 @@ Bool amdgpu_do_pageflip(ScrnInfoPtr scrn, ClientPtr client,
 			uint32_t target_msc);
 int drmmode_crtc_get_ust_msc(xf86CrtcPtr crtc, CARD64 *ust, CARD64 *msc);
 int drmmode_get_current_ust(int drm_fd, CARD64 * ust);
+void drmmode_crtc_set_vrr(xf86CrtcPtr crtc, Bool enabled);
 
 Bool drmmode_wait_vblank(xf86CrtcPtr crtc, drmVBlankSeqType type,
 			 uint32_t target_seq, unsigned long signal,

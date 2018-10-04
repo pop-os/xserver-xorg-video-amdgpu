@@ -268,6 +268,69 @@ int drmmode_crtc_get_ust_msc(xf86CrtcPtr crtc, CARD64 *ust, CARD64 *msc)
 	return Success;
 }
 
+static uint32_t
+drmmode_crtc_get_prop_id(uint32_t drm_fd,
+			 drmModeObjectPropertiesPtr props,
+			 char const* name)
+{
+	uint32_t i, prop_id = 0;
+
+	for (i = 0; !prop_id && i < props->count_props; ++i) {
+		drmModePropertyPtr drm_prop =
+			drmModeGetProperty(drm_fd, props->props[i]);
+
+		if (!drm_prop)
+			continue;
+
+		if (strcmp(drm_prop->name, name) == 0)
+			prop_id = drm_prop->prop_id;
+
+		drmModeFreeProperty(drm_prop);
+	}
+
+	return prop_id;
+}
+
+static void drmmode_crtc_vrr_init(int drm_fd, xf86CrtcPtr crtc)
+{
+	drmModeObjectPropertiesPtr drm_props;
+	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
+	drmmode_ptr drmmode = drmmode_crtc->drmmode;
+
+	if (drmmode->vrr_prop_id)
+		return;
+
+	drm_props = drmModeObjectGetProperties(drm_fd,
+					       drmmode_crtc->mode_crtc->crtc_id,
+					       DRM_MODE_OBJECT_CRTC);
+
+	if (!drm_props)
+		return;
+
+	drmmode->vrr_prop_id = drmmode_crtc_get_prop_id(drm_fd,
+							drm_props,
+							"VRR_ENABLED");
+
+	drmModeFreeObjectProperties(drm_props);
+}
+
+void drmmode_crtc_set_vrr(xf86CrtcPtr crtc, Bool enabled)
+{
+	ScrnInfoPtr pScrn = crtc->scrn;
+	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(pScrn);
+	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
+	drmmode_ptr drmmode = drmmode_crtc->drmmode;
+
+	if (drmmode->vrr_prop_id &&
+	    drmmode_crtc->vrr_enabled != enabled &&
+	    drmModeObjectSetProperty(pAMDGPUEnt->fd,
+				     drmmode_crtc->mode_crtc->crtc_id,
+				     DRM_MODE_OBJECT_CRTC,
+				     drmmode->vrr_prop_id,
+				     enabled) == 0)
+		drmmode_crtc->vrr_enabled = enabled;
+}
+
 static void
 drmmode_do_crtc_dpms(xf86CrtcPtr crtc, int mode)
 {
@@ -1953,6 +2016,7 @@ drmmode_crtc_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode, drmModeResPtr mode_res
 	drmmode_crtc_hw_id(crtc);
 
 	drmmode_crtc_cm_init(pAMDGPUEnt->fd, crtc);
+	drmmode_crtc_vrr_init(pAMDGPUEnt->fd, crtc);
 
 	/* Mark num'th crtc as in use on this device. */
 	pAMDGPUEnt->assigned_crtcs |= (1 << num);
