@@ -123,17 +123,18 @@ static void AMDGPUFreeRec(ScrnInfoPtr pScrn)
 	if (!pScrn)
 		return;
 
-	info = AMDGPUPTR(pScrn);
-	if (info) {
-		pEnt = info->pEnt;
-		free(pScrn->driverPrivate);
-		pScrn->driverPrivate = NULL;
-	} else {
-		pEnt = xf86GetEntityInfo(pScrn->entityList[pScrn->numEntities - 1]);
-	}
-
+	pEnt = xf86GetEntityInfo(pScrn->entityList[pScrn->numEntities - 1]);
 	pPriv = xf86GetEntityPrivate(pEnt->index, gAMDGPUEntityIndex);
 	pAMDGPUEnt = pPriv->ptr;
+
+	info = AMDGPUPTR(pScrn);
+	if (info) {
+		pAMDGPUEnt->scrn[info->instance_id] = NULL;
+		pAMDGPUEnt->num_scrns--;
+		free(pScrn->driverPrivate);
+		pScrn->driverPrivate = NULL;
+	}
+
 	if (pAMDGPUEnt->fd > 0) {
 		DevUnion *pPriv;
 		AMDGPUEntPtr pAMDGPUEnt;
@@ -1317,7 +1318,6 @@ Bool AMDGPUPreInit_KMS(ScrnInfoPtr pScrn, int flags)
 	AMDGPUEntPtr pAMDGPUEnt;
 	struct amdgpu_gpu_info gpu_info;
 	MessageType from;
-	DevUnion *pPriv;
 	Gamma zeros = { 0.0, 0.0, 0.0 };
 	int cpp;
 	uint64_t heap_size = 0;
@@ -1331,11 +1331,17 @@ Bool AMDGPUPreInit_KMS(ScrnInfoPtr pScrn, int flags)
 		       "AMDGPUPreInit_KMS\n");
 	if (pScrn->numEntities != 1)
 		return FALSE;
+
+	pAMDGPUEnt = xf86GetEntityPrivate(pScrn->entityList[0],
+					  getAMDGPUEntityIndex())->ptr;
+
 	if (!AMDGPUGetRec(pScrn))
 		return FALSE;
 
 	info = AMDGPUPTR(pScrn);
-	info->IsSecondary = FALSE;
+	info->instance_id = pAMDGPUEnt->num_scrns++;
+	pAMDGPUEnt->scrn[info->instance_id] = pScrn;
+
 	info->pEnt =
 	    xf86GetEntityInfo(pScrn->entityList[pScrn->numEntities - 1]);
 	if (info->pEnt->location.type != BUS_PCI
@@ -1345,22 +1351,10 @@ Bool AMDGPUPreInit_KMS(ScrnInfoPtr pScrn, int flags)
 	    )
 		return FALSE;
 
-	pPriv = xf86GetEntityPrivate(pScrn->entityList[0],
-				     getAMDGPUEntityIndex());
-	pAMDGPUEnt = pPriv->ptr;
-
-	if (xf86IsEntityShared(pScrn->entityList[0])) {
-		if (xf86IsPrimInitDone(pScrn->entityList[0])) {
-			info->IsSecondary = TRUE;
-		} else {
-			xf86SetPrimInitDone(pScrn->entityList[0]);
-		}
+	if (xf86IsEntityShared(pScrn->entityList[0]) &&
+	    info->instance_id == 0) {
+		xf86SetPrimInitDone(pScrn->entityList[0]);
 	}
-
-	if (info->IsSecondary)
-		pAMDGPUEnt->secondary_scrn = pScrn;
-	else
-		pAMDGPUEnt->primary_scrn = pScrn;
 
 	info->PciInfo = xf86GetPciInfoForEntity(info->pEnt->index);
 	pScrn->monitor = pScrn->confScreen->monitor;
