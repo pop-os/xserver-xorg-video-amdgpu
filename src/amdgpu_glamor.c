@@ -77,11 +77,17 @@ Bool amdgpu_glamor_pre_init(ScrnInfoPtr scrn)
 	pointer glamor_module;
 	CARD32 version;
 
+#if XORG_VERSION_CURRENT < XORG_VERSION_NUMERIC(1,20,99,0,0)
 	if (scrn->depth < 24) {
+#else
+	if (scrn->depth < 15) {
+#endif
 		xf86DrvMsg(scrn->scrnIndex, X_ERROR,
-			   "glamor requires depth >= 24, disabling.\n");
+			   "Depth %d not supported with glamor, disabling\n",
+			   scrn->depth);
 		return FALSE;
 	}
+
 #if XORG_VERSION_CURRENT < XORG_VERSION_NUMERIC(1,15,0,0,0)
 	if (!xf86LoaderCheckSymbol("glamor_egl_init")) {
 		xf86DrvMsg(scrn->scrnIndex, X_ERROR,

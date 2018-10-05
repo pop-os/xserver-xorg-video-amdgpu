@@ -38,6 +38,8 @@ amdgpu_get_gbm_format(int depth, int bitsPerPixel)
 	case 8:
 		return GBM_FORMAT_R8;
 #endif
+	case 15:
+		return GBM_FORMAT_ARGB1555;
 	case 16:
 		return GBM_FORMAT_RGB565;
 	case 32:
