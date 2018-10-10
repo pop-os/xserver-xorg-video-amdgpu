@@ -2881,8 +2881,7 @@ static Bool drmmode_xf86crtc_resize(ScrnInfoPtr scrn, int width, int height)
 	if (!amdgpu_glamor_create_screen_resources(scrn->pScreen))
 		goto fail;
 
-	if (info->use_glamor ||
-	    (info->front_buffer->flags & AMDGPU_BO_FLAGS_GBM)) {
+	if (info->use_glamor || info->dri2.enabled) {
 		if (!amdgpu_set_pixmap_bo(ppix, info->front_buffer))
 			goto fail;
 	}
