@@ -72,6 +72,19 @@ amdgpu_drm_queue_handle_one(struct amdgpu_drm_queue_entry *e)
 	free(e);
 }
 
+/*
+ * Abort one queued DRM entry, removing it
+ * from the list, calling the abort function and
+ * freeing the memory
+ */
+static void
+amdgpu_drm_abort_one(struct amdgpu_drm_queue_entry *e)
+{
+	xorg_list_del(&e->list);
+	e->abort(e->crtc, e->data);
+	free(e);
+}
+
 static void
 amdgpu_drm_queue_handler(struct xorg_list *signalled, unsigned int frame,
 			 unsigned int sec, unsigned int usec, void *user_ptr)
@@ -82,7 +95,7 @@ amdgpu_drm_queue_handler(struct xorg_list *signalled, unsigned int frame,
 	xorg_list_for_each_entry_safe(e, tmp, &amdgpu_drm_queue, list) {
 		if (e->seq == seq) {
 			if (!e->handler) {
-				amdgpu_drm_queue_handle_one(e);
+				amdgpu_drm_abort_one(e);
 				break;
 			}
 
@@ -171,19 +184,6 @@ amdgpu_drm_queue_alloc(xf86CrtcPtr crtc, ClientPtr client,
 	xorg_list_append(&e->list, &amdgpu_drm_queue);
 
 	return e->seq;
-}
-
-/*
- * Abort one queued DRM entry, removing it
- * from the list, calling the abort function and
- * freeing the memory
- */
-static void
-amdgpu_drm_abort_one(struct amdgpu_drm_queue_entry *e)
-{
-	xorg_list_del(&e->list);
-	e->abort(e->crtc, e->data);
-	free(e);
 }
 
 /*
