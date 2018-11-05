@@ -664,7 +664,8 @@ amdgpu_prime_scanout_update(PixmapDirtyUpdatePtr dirty)
 					       AMDGPU_DRM_QUEUE_CLIENT_DEFAULT,
 					       AMDGPU_DRM_QUEUE_ID_DEFAULT, NULL,
 					       amdgpu_prime_scanout_update_handler,
-					       amdgpu_prime_scanout_update_abort);
+					       amdgpu_prime_scanout_update_abort,
+					       FALSE);
 	if (drm_queue_seq == AMDGPU_DRM_QUEUE_ERROR) {
 		xf86DrvMsg(scrn->scrnIndex, X_WARNING,
 			   "amdgpu_drm_queue_alloc failed for PRIME update\n");
@@ -712,7 +713,7 @@ amdgpu_prime_scanout_flip(PixmapDirtyUpdatePtr ent)
 					       AMDGPU_DRM_QUEUE_ID_DEFAULT,
 					       NULL,
 					       amdgpu_scanout_flip_handler,
-					       amdgpu_scanout_flip_abort);
+					       amdgpu_scanout_flip_abort, TRUE);
 	if (drm_queue_seq == AMDGPU_DRM_QUEUE_ERROR) {
 		xf86DrvMsg(scrn->scrnIndex, X_WARNING,
 			   "Allocating DRM event queue entry failed for PRIME flip.\n");
@@ -940,7 +941,8 @@ amdgpu_scanout_update(xf86CrtcPtr xf86_crtc)
 					       AMDGPU_DRM_QUEUE_ID_DEFAULT,
 					       drmmode_crtc,
 					       amdgpu_scanout_update_handler,
-					       amdgpu_scanout_update_abort);
+					       amdgpu_scanout_update_abort,
+					       FALSE);
 	if (drm_queue_seq == AMDGPU_DRM_QUEUE_ERROR) {
 		xf86DrvMsg(scrn->scrnIndex, X_WARNING,
 			   "amdgpu_drm_queue_alloc failed for scanout update\n");
@@ -989,7 +991,7 @@ amdgpu_scanout_flip(ScreenPtr pScreen, AMDGPUInfoPtr info,
 					       AMDGPU_DRM_QUEUE_ID_DEFAULT,
 					       NULL,
 					       amdgpu_scanout_flip_handler,
-					       amdgpu_scanout_flip_abort);
+					       amdgpu_scanout_flip_abort, TRUE);
 	if (drm_queue_seq == AMDGPU_DRM_QUEUE_ERROR) {
 		xf86DrvMsg(scrn->scrnIndex, X_WARNING,
 			   "Allocating DRM event queue entry failed.\n");

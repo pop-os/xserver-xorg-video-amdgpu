@@ -157,7 +157,8 @@ amdgpu_present_queue_vblank(RRCrtcPtr crtc, uint64_t event_id, uint64_t msc)
 					       AMDGPU_DRM_QUEUE_CLIENT_DEFAULT,
 					       event_id, event,
 					       amdgpu_present_vblank_handler,
-					       amdgpu_present_vblank_abort);
+					       amdgpu_present_vblank_abort,
+					       FALSE);
 	if (drm_queue_seq == AMDGPU_DRM_QUEUE_ERROR) {
 		free(event);
 		return BadAlloc;
