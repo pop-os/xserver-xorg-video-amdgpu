@@ -1509,8 +1509,8 @@ drmmode_cursor_pixel(xf86CrtcPtr crtc, uint32_t *argb, Bool premultiplied,
 	int i;
 
 	if (premultiplied) {
-#if XORG_VERSION_CURRENT < XORG_VERSION_NUMERIC(1, 20, 99, 0, 0)
-		if (*argb > (alpha | alpha << 8 | alpha << 16 | alpha << 24))
+#if XORG_VERSION_CURRENT < XORG_VERSION_NUMERIC(1, 18, 4, 0, 0)
+		if (alpha == 0 && (*argb & 0xffffff) != 0)
 			/* Doesn't look like premultiplied alpha */
 			return FALSE;
 #endif
