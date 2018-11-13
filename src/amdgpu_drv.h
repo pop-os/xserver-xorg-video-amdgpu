@@ -301,6 +301,7 @@ typedef struct {
 	int group_bytes;
 
 	/* kms pageflipping */
+	WindowPtr flip_window;
 	Bool allowPageFlip;
 
 	/* cursor size */

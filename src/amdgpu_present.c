@@ -273,6 +273,8 @@ amdgpu_present_check_flip(RRCrtcPtr crtc, WindowPtr window, PixmapPtr pixmap,
 	if (num_crtcs_on == 0)
 		return FALSE;
 
+	info->flip_window = window;
+
 	return TRUE;
 }
 
@@ -313,13 +315,12 @@ amdgpu_present_flip(RRCrtcPtr crtc, uint64_t event_id, uint64_t target_msc,
                    PixmapPtr pixmap, Bool sync_flip)
 {
 	xf86CrtcPtr xf86_crtc = crtc->devPrivate;
-	ScreenPtr screen = crtc->pScreen;
 	ScrnInfoPtr scrn = xf86_crtc->scrn;
 	AMDGPUInfoPtr info = AMDGPUPTR(scrn);
 	struct amdgpu_present_vblank_event *event;
 	Bool ret = FALSE;
 
-	if (!amdgpu_present_check_flip(crtc, screen->root, pixmap, sync_flip))
+	if (!amdgpu_present_check_flip(crtc, info->flip_window , pixmap, sync_flip))
 		return ret;
 
 	event = calloc(1, sizeof(struct amdgpu_present_vblank_event));
@@ -359,6 +360,8 @@ amdgpu_present_unflip(ScreenPtr screen, uint64_t event_id)
 		(amdgpu_present_screen_info.capabilities & PresentCapabilityAsync) ?
 		FLIP_ASYNC : FLIP_VSYNC;
 	int i;
+
+	info->flip_window = NULL;
 
 	if (!amdgpu_present_check_unflip(scrn))
 		goto modeset;
