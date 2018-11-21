@@ -91,6 +91,12 @@ struct drmmode_fb {
 	uint32_t handle;
 };
 
+enum drmmode_scanout_status {
+	DRMMODE_SCANOUT_OK,
+	DRMMODE_SCANOUT_FLIP_FAILED = 1u << 0,
+	DRMMODE_SCANOUT_VBLANK_FAILED = 1u << 1,
+};
+
 struct drmmode_scanout {
 	struct amdgpu_buffer *bo;
 	PixmapPtr pixmap;
@@ -110,6 +116,7 @@ typedef struct {
 	unsigned scanout_id;
 	uintptr_t scanout_update_pending;
 	Bool tear_free;
+	enum drmmode_scanout_status scanout_status;
 	Bool vrr_enabled;
 
 	PixmapPtr prime_scanout_pixmap;
