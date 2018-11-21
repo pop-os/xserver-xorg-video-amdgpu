@@ -790,11 +790,17 @@ drmmode_crtc_scanout_update(xf86CrtcPtr crtc, DisplayModePtr mode,
 		*fb = amdgpu_pixmap_get_fb(drmmode_crtc->scanout[scanout_id].pixmap);
 		*x = *y = 0;
 
-		amdgpu_scanout_do_update(crtc, scanout_id,
-					 screen->GetWindowPixmap(screen->root),
-					 extents);
-		RegionEmpty(DamageRegion(drmmode_crtc->scanout_damage));
-		amdgpu_glamor_finish(scrn);
+		if (amdgpu_scanout_do_update(crtc, scanout_id,
+					     screen->GetWindowPixmap(screen->root),
+					     extents)) {
+			RegionEmpty(DamageRegion(drmmode_crtc->scanout_damage));
+			amdgpu_glamor_finish(scrn);
+
+			if (!drmmode_crtc->flip_pending) {
+				amdgpu_drm_abort_entry(drmmode_crtc->
+						       scanout_update_pending);
+			}
+		}
 	}
 }
 
