@@ -1633,16 +1633,23 @@ drmmode_cursor_pixel(xf86CrtcPtr crtc, uint32_t *argb, Bool *premultiplied,
 static void drmmode_load_cursor_argb(xf86CrtcPtr crtc, CARD32 * image)
 {
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
-	uint32_t *ptr = (uint32_t *) (drmmode_crtc->cursor_buffer->cpu_ptr);
 	ScrnInfoPtr pScrn = crtc->scrn;
 	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
+	unsigned id = drmmode_crtc->cursor_id;
 	Bool premultiplied = TRUE;
 	Bool apply_gamma = TRUE;
 	uint32_t argb;
+	uint32_t *ptr;
 
 	if ((crtc->scrn->depth != 24 && crtc->scrn->depth != 32) ||
 	    drmmode_cm_enabled(&info->drmmode))
 		apply_gamma = FALSE;
+
+	if (drmmode_crtc->cursor &&
+	    XF86_CRTC_CONFIG_PTR(pScrn)->cursor != drmmode_crtc->cursor)
+		id ^= 1;
+
+	ptr = (uint32_t *) (drmmode_crtc->cursor_buffer[id]->cpu_ptr);
 
 #if XF86_CRTC_VERSION < 7
 	if (crtc->driverIsPerformingTransform) {
@@ -1681,6 +1688,11 @@ retry:
 			ptr[i] = cpu_to_le32(argb);
 		}
 	}
+
+	if (id != drmmode_crtc->cursor_id) {
+		drmmode_crtc->cursor_id = id;
+		crtc->funcs->show_cursor(crtc);
+	}
 }
 
 #if XORG_VERSION_CURRENT >= XORG_VERSION_NUMERIC(1,15,99,903,0)
@@ -1705,7 +1717,7 @@ static void drmmode_hide_cursor(xf86CrtcPtr crtc)
 
 	drmModeSetCursor(pAMDGPUEnt->fd, drmmode_crtc->mode_crtc->crtc_id, 0,
 			 info->cursor_w, info->cursor_h);
-
+	drmmode_crtc->cursor = NULL;
 }
 
 static void drmmode_show_cursor(xf86CrtcPtr crtc)
@@ -1714,6 +1726,8 @@ static void drmmode_show_cursor(xf86CrtcPtr crtc)
 	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
 	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(pScrn);
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
+	struct amdgpu_buffer *cursor_buffer =
+		drmmode_crtc->cursor_buffer[drmmode_crtc->cursor_id];
 	xf86CrtcConfigPtr xf86_config = XF86_CRTC_CONFIG_PTR(pScrn);
 	CursorPtr cursor = xf86_config->cursor;
 	int xhot = cursor->bits->xhot;
@@ -1721,9 +1735,11 @@ static void drmmode_show_cursor(xf86CrtcPtr crtc)
 	static Bool use_set_cursor2 = TRUE;
 	struct drm_mode_cursor2 arg;
 
+	drmmode_crtc->cursor = xf86_config->cursor;
+
 	memset(&arg, 0, sizeof(arg));
 
-	if (!amdgpu_bo_get_handle(drmmode_crtc->cursor_buffer, &arg.handle)) {
+	if (!amdgpu_bo_get_handle(cursor_buffer, &arg.handle)) {
 		ErrorF("failed to get BO handle for cursor\n");
 		return;
 	}
