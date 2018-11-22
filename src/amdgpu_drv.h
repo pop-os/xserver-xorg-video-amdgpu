@@ -296,7 +296,6 @@ typedef struct {
 	Bool shadow_fb;
 	void *fb_shadow;
 	struct amdgpu_buffer *front_buffer;
-	struct amdgpu_buffer *cursor_buffer[32];
 
 	uint64_t vram_size;
 	uint64_t gart_size;

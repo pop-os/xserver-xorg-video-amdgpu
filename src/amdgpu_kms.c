@@ -2280,23 +2280,21 @@ static Bool amdgpu_setup_kernel_mem(ScreenPtr pScreen)
 	cursor_size = info->cursor_w * info->cursor_h * 4;
 	cursor_size = AMDGPU_ALIGN(cursor_size, AMDGPU_GPU_PAGE_SIZE);
 	for (c = 0; c < xf86_config->num_crtc; c++) {
-		/* cursor objects */
-		if (!info->cursor_buffer[c]) {
-			info->cursor_buffer[c] = amdgpu_bo_open(pAMDGPUEnt->pDev,
-								cursor_size, 0,
-								AMDGPU_GEM_DOMAIN_VRAM);
-			if (!(info->cursor_buffer[c])) {
+		drmmode_crtc_private_ptr drmmode_crtc = xf86_config->crtc[c]->driver_private;
+
+		if (!drmmode_crtc->cursor_buffer) {
+			drmmode_crtc->cursor_buffer = amdgpu_bo_open(pAMDGPUEnt->pDev,
+								     cursor_size, 0,
+								     AMDGPU_GEM_DOMAIN_VRAM);
+			if (!(drmmode_crtc->cursor_buffer)) {
 				ErrorF("Failed to allocate cursor buffer memory\n");
 				return FALSE;
 			}
 
-			if (amdgpu_bo_cpu_map(info->cursor_buffer[c]->bo.amdgpu,
-					      &info->cursor_buffer[c]->cpu_ptr)) {
+			if (amdgpu_bo_cpu_map(drmmode_crtc->cursor_buffer->bo.amdgpu,
+					      &drmmode_crtc->cursor_buffer->cpu_ptr)) {
 				ErrorF("Failed to map cursor buffer memory\n");
 			}
-
-			drmmode_set_cursor(pScrn, &info->drmmode, c,
-					   info->cursor_buffer[c]);
 		}
 	}
 
