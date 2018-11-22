@@ -1627,8 +1627,10 @@ drmmode_cursor_pixel(xf86CrtcPtr crtc, uint32_t *argb, Bool *premultiplied,
 	return TRUE;
 }
 
-static void drmmode_do_load_cursor_argb(xf86CrtcPtr crtc, CARD32 *image, uint32_t *ptr)
+static void drmmode_load_cursor_argb(xf86CrtcPtr crtc, CARD32 * image)
 {
+	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
+	uint32_t *ptr = (uint32_t *) (drmmode_crtc->cursor_buffer->cpu_ptr);
 	ScrnInfoPtr pScrn = crtc->scrn;
 	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
 	Bool premultiplied = TRUE;
@@ -1675,26 +1677,6 @@ retry:
 
 			ptr[i] = cpu_to_le32(argb);
 		}
-	}
-}
-
-static void drmmode_load_cursor_argb(xf86CrtcPtr crtc, CARD32 * image)
-{
-	ScrnInfoPtr pScrn = crtc->scrn;
-	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
-	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
-	uint32_t cursor_size = info->cursor_w * info->cursor_h;
-
-	if (info->gbm) {
-		uint32_t ptr[cursor_size];
-
-		drmmode_do_load_cursor_argb(crtc, image, ptr);
-		gbm_bo_write(drmmode_crtc->cursor_buffer->bo.gbm, ptr, cursor_size * 4);
-	} else {
-		/* cursor should be mapped already */
-		uint32_t *ptr = (uint32_t *) (drmmode_crtc->cursor_buffer->cpu_ptr);
-
-		drmmode_do_load_cursor_argb(crtc, image, ptr);
 	}
 }
 

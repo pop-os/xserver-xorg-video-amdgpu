@@ -2270,6 +2270,7 @@ void AMDGPUAdjustFrame_KMS(ScrnInfoPtr pScrn, int x, int y)
 static Bool amdgpu_setup_kernel_mem(ScreenPtr pScreen)
 {
 	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
+	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(pScrn);
 	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
 	xf86CrtcConfigPtr xf86_config = XF86_CRTC_CONFIG_PTR(pScrn);
 	int cpp = info->pixel_bytes;
@@ -2281,40 +2282,17 @@ static Bool amdgpu_setup_kernel_mem(ScreenPtr pScreen)
 	for (c = 0; c < xf86_config->num_crtc; c++) {
 		/* cursor objects */
 		if (!info->cursor_buffer[c]) {
-			if (info->gbm) {
-				info->cursor_buffer[c] = (struct amdgpu_buffer *)calloc(1, sizeof(struct amdgpu_buffer));
-				if (!info->cursor_buffer[c]) {
-					return FALSE;
-				}
-				info->cursor_buffer[c]->ref_count = 1;
-				info->cursor_buffer[c]->flags = AMDGPU_BO_FLAGS_GBM;
+			info->cursor_buffer[c] = amdgpu_bo_open(pAMDGPUEnt->pDev,
+								cursor_size, 0,
+								AMDGPU_GEM_DOMAIN_VRAM);
+			if (!(info->cursor_buffer[c])) {
+				ErrorF("Failed to allocate cursor buffer memory\n");
+				return FALSE;
+			}
 
-				info->cursor_buffer[c]->bo.gbm = gbm_bo_create(info->gbm,
-									       info->cursor_w,
-									       info->cursor_h,
-									       GBM_FORMAT_ARGB8888,
-									       GBM_BO_USE_CURSOR | GBM_BO_USE_WRITE);
-				if (!info->cursor_buffer[c]->bo.gbm) {
-					xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-						   "Failed to allocate cursor buffer memory\n");
-					free(info->cursor_buffer[c]);
-					return FALSE;
-				}
-			} else {
-				AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(pScrn);
-				info->cursor_buffer[c] = amdgpu_bo_open(pAMDGPUEnt->pDev,
-									cursor_size,
-									0,
-									AMDGPU_GEM_DOMAIN_VRAM);
-				if (!(info->cursor_buffer[c])) {
-					ErrorF("Failed to allocate cursor buffer memory\n");
-					return FALSE;
-				}
-
-				if (amdgpu_bo_cpu_map(info->cursor_buffer[c]->bo.amdgpu,
-							&info->cursor_buffer[c]->cpu_ptr)) {
-					ErrorF("Failed to map cursor buffer memory\n");
-				}
+			if (amdgpu_bo_cpu_map(info->cursor_buffer[c]->bo.amdgpu,
+					      &info->cursor_buffer[c]->cpu_ptr)) {
+				ErrorF("Failed to map cursor buffer memory\n");
 			}
 
 			drmmode_set_cursor(pScrn, &info->drmmode, c,
