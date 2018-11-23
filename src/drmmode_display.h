@@ -107,6 +107,11 @@ typedef struct {
 	drmmode_ptr drmmode;
 	drmModeCrtcPtr mode_crtc;
 	int hw_id;
+
+	int cursor_x;
+	int cursor_y;
+	int cursor_xhot;
+	int cursor_yhot;
 	struct amdgpu_buffer *cursor_buffer;
 	struct drmmode_scanout rotate;
 	struct drmmode_scanout scanout[2];
