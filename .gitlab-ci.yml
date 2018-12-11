@@ -1,7 +1,42 @@
-image: registry.freedesktop.org/xorg/driver/xf86-video-amdgpu:debian-testing-20181003
+# IMAGE_TAG is the tag of the docker image used for the build jobs. If the
+# image doesn't exist yet, the docker-image stage generates it.
+#
+# In order to generate a new image, one should generally change the tag.
+# While removing the image from the registry would also work, that's not
+# recommended except for ephemeral images during development: Replacing an
+# image after a significant amount of time might pull in newer versions of
+# gcc/clang or other packages, which might break the build with older commits
+# using the same tag.
+#
+# After merging a change resulting in generating a new image to the main
+# repository, it's recommended to remove the image from the source repository's
+# container registry, so that the image from the main repository's registry
+# will be used there as well.
+variables:
+  IMAGE_TAG: "debian-testing-20181213"
+  IMAGE_LOCAL: "$CI_REGISTRY_IMAGE:$IMAGE_TAG"
+  IMAGE_MAIN: "registry.freedesktop.org/xorg/driver/$CI_PROJECT_NAME:$IMAGE_TAG"
 
 stages:
+  - docker-image
   - build
+
+
+debian-testing:
+  stage: docker-image
+  image: docker:stable
+  services:
+  - docker:dind
+  before_script:
+  - docker login -u gitlab-ci-token -p $CI_JOB_TOKEN $CI_REGISTRY
+  script:
+  - docker pull "$IMAGE_LOCAL" ||
+      ((docker pull "$IMAGE_MAIN" && docker tag "$IMAGE_MAIN" "$IMAGE_LOCAL") ||
+       docker build -t "$IMAGE_LOCAL" .gitlab-ci;
+       docker push "$IMAGE_LOCAL")
+
+
+image: $IMAGE_LOCAL
 
 # The default build instructions
 .default_build:
@@ -44,7 +79,7 @@ xserver-1.14:
     XSERVER_VERSION: "1.14"
 
 xserver-1.15:
-  extends: .default_build
+  extends: xserver-1.14
   variables:
     XSERVER_VERSION: "1.15"
 
