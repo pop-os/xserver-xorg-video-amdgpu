@@ -24,16 +24,30 @@ stages:
 
 debian-testing:
   stage: docker-image
-  image: docker:stable
-  services:
-  - docker:dind
-  before_script:
-  - docker login -u gitlab-ci-token -p $CI_JOB_TOKEN $CI_REGISTRY
+  image:
+    name: gcr.io/kaniko-project/executor:debug
+    entrypoint: [""]
   script:
-  - docker pull "$IMAGE_LOCAL" ||
-      ((docker pull "$IMAGE_MAIN" && docker tag "$IMAGE_MAIN" "$IMAGE_LOCAL") ||
-       docker build -t "$IMAGE_LOCAL" .gitlab-ci;
-       docker push "$IMAGE_LOCAL")
+    - echo "{\"auths\":{\"$CI_REGISTRY\":{\"username\":\"$CI_REGISTRY_USER\",\"password\":\"$CI_REGISTRY_PASSWORD\"}}}" > /kaniko/.docker/config.json
+    - mkdir kaniko-context
+    - |
+      echo "FROM $IMAGE_LOCAL" > kaniko-context/Dockerfile
+      # If the image exists in the local registry, skip to the build-and-test job
+      set +e
+      set -x
+      /kaniko/executor --context kaniko-context --no-push && exit 0
+      set +x
+      set -e
+    - |
+      echo "FROM $IMAGE_MAIN" > kaniko-context/Dockerfile
+      # Try to re-use the image from the main repository's registry, and if
+      # that fails, generate a local image from scratch
+      set +e
+      set -x
+      /kaniko/executor --context kaniko-context --destination $IMAGE_LOCAL && exit 0
+      set +x
+      set -e
+    - /kaniko/executor --context $CI_PROJECT_DIR/.gitlab-ci --destination $IMAGE_LOCAL
 
 
 image: $IMAGE_LOCAL
