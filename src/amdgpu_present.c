@@ -389,7 +389,6 @@ amdgpu_present_unflip(ScreenPtr screen, uint64_t event_id)
 		FLIP_ASYNC : FLIP_VSYNC;
 	int i;
 
-	info->flip_window = NULL;
 	info->drmmode.vrr_flipping = FALSE;
 	amdgpu_present_set_screen_vrr(scrn);
 
