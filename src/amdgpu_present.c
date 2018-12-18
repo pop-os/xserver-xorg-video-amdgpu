@@ -91,16 +91,15 @@ amdgpu_present_get_ust_msc(RRCrtcPtr crtc, CARD64 *ust, CARD64 *msc)
  * Changes the variable refresh state for every CRTC on the screen.
  */
 static void
-amdgpu_present_set_screen_vrr(ScrnInfoPtr scrn)
+amdgpu_present_set_screen_vrr(ScrnInfoPtr scrn, Bool vrr_enabled)
 {
-	AMDGPUInfoPtr info = AMDGPUPTR(scrn);
 	xf86CrtcConfigPtr config = XF86_CRTC_CONFIG_PTR(scrn);
 	xf86CrtcPtr crtc;
 	int i;
 
 	for (i = 0; i < config->num_crtc; i++) {
 		crtc = config->crtc[i];
-		drmmode_crtc_set_vrr(crtc, info->drmmode.vrr_flipping);
+		drmmode_crtc_set_vrr(crtc, vrr_enabled);
 	}
 }
 
@@ -292,16 +291,6 @@ amdgpu_present_check_flip(RRCrtcPtr crtc, WindowPtr window, PixmapPtr pixmap,
 
 	info->flip_window = window;
 
-	/* A window can only flip if it covers the entire X screen.
-	 * Only one window can flip at a time.
-	 *
-	 * If the window also has the variable refresh property then
-	 * variable refresh supported can be enabled on every CRTC.
-	 */
-	info->drmmode.vrr_flipping =
-		info->vrr_support &&
-		amdgpu_window_has_variable_refresh(window);
-
 	return TRUE;
 }
 
@@ -347,7 +336,7 @@ amdgpu_present_flip(RRCrtcPtr crtc, uint64_t event_id, uint64_t target_msc,
 	struct amdgpu_present_vblank_event *event;
 	Bool ret = FALSE;
 
-	if (!amdgpu_present_check_flip(crtc, info->flip_window , pixmap, sync_flip))
+	if (!amdgpu_present_check_flip(crtc, info->flip_window, pixmap, sync_flip))
 		return ret;
 
 	event = calloc(1, sizeof(struct amdgpu_present_vblank_event));
@@ -356,7 +345,16 @@ amdgpu_present_flip(RRCrtcPtr crtc, uint64_t event_id, uint64_t target_msc,
 
 	event->event_id = event_id;
 
-	amdgpu_present_set_screen_vrr(scrn);
+	/* A window can only flip if it covers the entire X screen.
+	 * Only one window can flip at a time.
+	 *
+	 * If the window also has the variable refresh property then
+	 * variable refresh supported can be enabled on every CRTC.
+	 */
+	if (info->vrr_support &&
+	    amdgpu_window_has_variable_refresh(info->flip_window))
+		amdgpu_present_set_screen_vrr(scrn, TRUE);
+
 	amdgpu_glamor_flush(scrn);
 
 	ret = amdgpu_do_pageflip(scrn, AMDGPU_DRM_QUEUE_CLIENT_DEFAULT,
@@ -389,8 +387,7 @@ amdgpu_present_unflip(ScreenPtr screen, uint64_t event_id)
 		FLIP_ASYNC : FLIP_VSYNC;
 	int i;
 
-	info->drmmode.vrr_flipping = FALSE;
-	amdgpu_present_set_screen_vrr(scrn);
+	amdgpu_present_set_screen_vrr(scrn, FALSE);
 
 	if (!amdgpu_present_check_unflip(scrn))
 		goto modeset;

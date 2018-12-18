@@ -65,7 +65,6 @@ typedef struct {
 
 	Bool dri2_flipping;
 	Bool present_flipping;
-	Bool vrr_flipping;
 	uint32_t vrr_prop_id;
 
 	/* Cache for DRM property type IDs for CRTC color management */
