@@ -171,6 +171,12 @@ amdgpu_dri2_create_buffer2(ScreenPtr pScreen,
 	if (is_glamor_pixmap) {
 		pixmap = amdgpu_glamor_set_pixmap_bo(drawable, pixmap);
 		pixmap->refcnt++;
+
+		/* The copy operation from amdgpu_glamor_set_pixmap_bo needs to
+		 * be flushed to the kernel driver before the client starts
+		 * using the pixmap storage for direct rendering.
+		 */
+		amdgpu_glamor_flush(pScrn);
 	}
 
 	if (!amdgpu_get_flink_name(pAMDGPUEnt, pixmap, &buffers->name))
