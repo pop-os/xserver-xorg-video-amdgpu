@@ -215,7 +215,7 @@ amdgpu_glamor_create_pixmap(ScreenPtr screen, int w, int h, int depth,
 
 			usage |= AMDGPU_CREATE_PIXMAP_LINEAR |
 				 AMDGPU_CREATE_PIXMAP_GTT;
-		} else {
+		} else if (usage != CREATE_PIXMAP_USAGE_BACKING_PIXMAP) {
 			pixmap = glamor_create_pixmap(screen, w, h, depth, usage);
 			if (pixmap)
 				return pixmap;
