@@ -823,7 +823,7 @@ amdgpu_prime_scanout_flip(PixmapDirtyUpdatePtr ent)
 
 	if (drmmode_page_flip_target_relative(pAMDGPUEnt, drmmode_crtc,
 					      drmmode_crtc->flip_pending->handle,
-					      0, drm_queue_seq, 0) != 0) {
+					      0, drm_queue_seq, 1) != 0) {
 		if (!(drmmode_crtc->scanout_status & DRMMODE_SCANOUT_FLIP_FAILED)) {
 			xf86DrvMsg(scrn->scrnIndex, X_WARNING,
 				   "flip queue failed in %s: %s, TearFree inactive\n",
@@ -1132,7 +1132,7 @@ amdgpu_scanout_flip(ScreenPtr pScreen, AMDGPUInfoPtr info,
 
 	if (drmmode_page_flip_target_relative(pAMDGPUEnt, drmmode_crtc,
 					      drmmode_crtc->flip_pending->handle,
-					      0, drm_queue_seq, 0) != 0) {
+					      0, drm_queue_seq, 1) != 0) {
 		if (!(drmmode_crtc->scanout_status & DRMMODE_SCANOUT_FLIP_FAILED)) {
 			xf86DrvMsg(scrn->scrnIndex, X_WARNING,
 				   "flip queue failed in %s: %s, TearFree inactive\n",
