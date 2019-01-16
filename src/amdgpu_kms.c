@@ -491,10 +491,14 @@ amdgpu_scanout_flip_abort(xf86CrtcPtr crtc, void *event_data)
 {
 	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(crtc->scrn);
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
+	struct drmmode_fb *fb = event_data;
 
 	drmmode_crtc->scanout_update_pending = 0;
-	drmmode_fb_reference(pAMDGPUEnt->fd, &drmmode_crtc->flip_pending,
-			     NULL);
+
+	if (drmmode_crtc->flip_pending == fb) {
+		drmmode_fb_reference(pAMDGPUEnt->fd, &drmmode_crtc->flip_pending,
+				     NULL);
+	}
 }
 
 static void
@@ -503,9 +507,9 @@ amdgpu_scanout_flip_handler(xf86CrtcPtr crtc, uint32_t msc, uint64_t usec,
 {
 	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(crtc->scrn);
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
+	struct drmmode_fb *fb = event_data;
 
-	drmmode_fb_reference(pAMDGPUEnt->fd, &drmmode_crtc->fb,
-			     drmmode_crtc->flip_pending);
+	drmmode_fb_reference(pAMDGPUEnt->fd, &drmmode_crtc->fb, fb);
 	amdgpu_scanout_flip_abort(crtc, event_data);
 }
 
@@ -786,24 +790,31 @@ amdgpu_prime_scanout_flip(PixmapDirtyUpdatePtr ent)
 	drmmode_crtc_private_ptr drmmode_crtc;
 	uintptr_t drm_queue_seq;
 	unsigned scanout_id;
+	struct drmmode_fb *fb;
 
 	if (!crtc || !crtc->enabled)
 		return;
 
 	drmmode_crtc = crtc->driver_private;
+	scanout_id = drmmode_crtc->scanout_id ^ 1;
 	if (drmmode_crtc->scanout_update_pending ||
-	    !drmmode_crtc->scanout[drmmode_crtc->scanout_id].pixmap ||
+	    !drmmode_crtc->scanout[scanout_id].pixmap ||
 	    drmmode_crtc->dpms_mode != DPMSModeOn)
 		return;
 
-	scanout_id = drmmode_crtc->scanout_id ^ 1;
 	if (!amdgpu_prime_scanout_do_update(crtc, scanout_id))
 		return;
 
+	fb = amdgpu_pixmap_get_fb(drmmode_crtc->scanout[scanout_id].pixmap);
+	if (!fb) {
+		xf86DrvMsg(scrn->scrnIndex, X_WARNING,
+			   "Failed to get FB for PRIME flip.\n");
+		return;
+	}
+	
 	drm_queue_seq = amdgpu_drm_queue_alloc(crtc,
 					       AMDGPU_DRM_QUEUE_CLIENT_DEFAULT,
-					       AMDGPU_DRM_QUEUE_ID_DEFAULT,
-					       NULL,
+					       AMDGPU_DRM_QUEUE_ID_DEFAULT, fb,
 					       amdgpu_scanout_flip_handler,
 					       amdgpu_scanout_flip_abort, TRUE);
 	if (drm_queue_seq == AMDGPU_DRM_QUEUE_ERROR) {
@@ -812,18 +823,9 @@ amdgpu_prime_scanout_flip(PixmapDirtyUpdatePtr ent)
 		return;
 	}
 
-	drmmode_fb_reference(pAMDGPUEnt->fd, &drmmode_crtc->flip_pending,
-			     amdgpu_pixmap_get_fb(drmmode_crtc->scanout[scanout_id].pixmap));
-	if (!drmmode_crtc->flip_pending) {
-		xf86DrvMsg(scrn->scrnIndex, X_WARNING,
-			   "Failed to get FB for PRIME flip.\n");
-		amdgpu_drm_abort_entry(drm_queue_seq);
-		return;
-	}
-
 	if (drmmode_page_flip_target_relative(pAMDGPUEnt, drmmode_crtc,
-					      drmmode_crtc->flip_pending->handle,
-					      0, drm_queue_seq, 1) != 0) {
+					      fb->handle, 0, drm_queue_seq, 1)
+	    != 0) {
 		if (!(drmmode_crtc->scanout_status & DRMMODE_SCANOUT_FLIP_FAILED)) {
 			xf86DrvMsg(scrn->scrnIndex, X_WARNING,
 				   "flip queue failed in %s: %s, TearFree inactive\n",
@@ -842,6 +844,7 @@ amdgpu_prime_scanout_flip(PixmapDirtyUpdatePtr ent)
 
 	drmmode_crtc->scanout_id = scanout_id;
 	drmmode_crtc->scanout_update_pending = drm_queue_seq;
+	drmmode_fb_reference(pAMDGPUEnt->fd, &drmmode_crtc->flip_pending, fb);
 }
 
 static void
@@ -1094,6 +1097,7 @@ amdgpu_scanout_flip(ScreenPtr pScreen, AMDGPUInfoPtr info,
 	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(scrn);
 	uintptr_t drm_queue_seq;
 	unsigned scanout_id;
+	struct drmmode_fb *fb;
 
 	if (drmmode_crtc->scanout_update_pending ||
 	    drmmode_crtc->flip_pending ||
@@ -1109,10 +1113,16 @@ amdgpu_scanout_flip(ScreenPtr pScreen, AMDGPUInfoPtr info,
 	amdgpu_glamor_flush(scrn);
 	RegionEmpty(region);
 
+	fb = amdgpu_pixmap_get_fb(drmmode_crtc->scanout[scanout_id].pixmap);
+	if (!fb) {
+		xf86DrvMsg(scrn->scrnIndex, X_WARNING,
+			   "Failed to get FB for scanout flip.\n");
+		return;
+	}
+
 	drm_queue_seq = amdgpu_drm_queue_alloc(xf86_crtc,
 					       AMDGPU_DRM_QUEUE_CLIENT_DEFAULT,
-					       AMDGPU_DRM_QUEUE_ID_DEFAULT,
-					       NULL,
+					       AMDGPU_DRM_QUEUE_ID_DEFAULT, fb,
 					       amdgpu_scanout_flip_handler,
 					       amdgpu_scanout_flip_abort, TRUE);
 	if (drm_queue_seq == AMDGPU_DRM_QUEUE_ERROR) {
@@ -1121,18 +1131,9 @@ amdgpu_scanout_flip(ScreenPtr pScreen, AMDGPUInfoPtr info,
 		return;
 	}
 
-	drmmode_fb_reference(pAMDGPUEnt->fd, &drmmode_crtc->flip_pending,
-			     amdgpu_pixmap_get_fb(drmmode_crtc->scanout[scanout_id].pixmap));
-	if (!drmmode_crtc->flip_pending) {
-		xf86DrvMsg(scrn->scrnIndex, X_WARNING,
-			   "Failed to get FB for scanout flip.\n");
-		amdgpu_drm_abort_entry(drm_queue_seq);
-		return;
-	}
-
 	if (drmmode_page_flip_target_relative(pAMDGPUEnt, drmmode_crtc,
-					      drmmode_crtc->flip_pending->handle,
-					      0, drm_queue_seq, 1) != 0) {
+					      fb->handle, 0, drm_queue_seq, 1)
+	    != 0) {
 		if (!(drmmode_crtc->scanout_status & DRMMODE_SCANOUT_FLIP_FAILED)) {
 			xf86DrvMsg(scrn->scrnIndex, X_WARNING,
 				   "flip queue failed in %s: %s, TearFree inactive\n",
@@ -1158,6 +1159,7 @@ amdgpu_scanout_flip(ScreenPtr pScreen, AMDGPUInfoPtr info,
 
 	drmmode_crtc->scanout_id = scanout_id;
 	drmmode_crtc->scanout_update_pending = drm_queue_seq;
+	drmmode_fb_reference(pAMDGPUEnt->fd, &drmmode_crtc->flip_pending, fb);
 }
 
 static void AMDGPUBlockHandler_KMS(BLOCKHANDLER_ARGS_DECL)
