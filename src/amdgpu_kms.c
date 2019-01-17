@@ -66,6 +66,11 @@ static DevPrivateKeyRec amdgpu_window_private_key;
 static DevScreenPrivateKeyRec amdgpu_client_private_key;
 DevScreenPrivateKeyRec amdgpu_device_private_key;
 
+static Bool amdgpu_property_vectors_wrapped;
+static Bool restore_property_vector;
+static int (*saved_change_property) (ClientPtr client);
+static int (*saved_delete_property) (ClientPtr client);
+
 static Bool amdgpu_setup_kernel_mem(ScreenPtr pScreen);
 
 const OptionInfoRec AMDGPUOptions_KMS[] = {
@@ -87,6 +92,80 @@ const OptionInfoRec AMDGPUOptions_KMS[] = {
 const OptionInfoRec *AMDGPUOptionsWeak(void)
 {
 	return AMDGPUOptions_KMS;
+}
+
+/* Wrapper for xserver/dix/property.c:ProcChangeProperty */
+static int
+amdgpu_change_property(ClientPtr client)
+{
+	int ret;
+
+	client->requestVector[X_ChangeProperty] = saved_change_property;
+	ret = saved_change_property(client);
+
+	if (!restore_property_vector)
+		client->requestVector[X_ChangeProperty] = amdgpu_change_property;
+
+	return ret;
+}
+
+/* Wrapper for xserver/dix/property.c:ProcDeleteProperty */
+static int
+amdgpu_delete_property(ClientPtr client)
+{
+	int ret;
+
+	client->requestVector[X_DeleteProperty] = saved_delete_property;
+	ret = saved_delete_property(client);
+
+	if (!restore_property_vector)
+		client->requestVector[X_DeleteProperty] = amdgpu_delete_property;
+
+	return ret;
+}
+
+static void
+amdgpu_unwrap_property_requests(ScrnInfoPtr scrn)
+{
+	int i;
+
+	if (!amdgpu_property_vectors_wrapped)
+		return;
+
+	if (ProcVector[X_ChangeProperty] == amdgpu_change_property)
+		ProcVector[X_ChangeProperty] = saved_change_property;
+	else
+		restore_property_vector = TRUE;
+
+	if (ProcVector[X_DeleteProperty] == amdgpu_delete_property)
+		ProcVector[X_DeleteProperty] = saved_delete_property;
+	else
+		restore_property_vector = TRUE;
+
+	for (i = 0; i < currentMaxClients; i++) {
+		if (clients[i]->requestVector[X_ChangeProperty] ==
+		    amdgpu_change_property) {
+			clients[i]->requestVector[X_ChangeProperty] =
+				saved_change_property;
+		} else {
+			restore_property_vector = TRUE;
+		}
+
+		if (clients[i]->requestVector[X_DeleteProperty] ==
+		    amdgpu_delete_property) {
+			clients[i]->requestVector[X_DeleteProperty] =
+				saved_delete_property;
+		} else {
+			restore_property_vector = TRUE;
+		}
+	}
+
+	if (restore_property_vector) {
+		xf86DrvMsg(scrn->scrnIndex, X_WARNING,
+			   "Couldn't unwrap some window property request vectors\n");
+	}
+
+	amdgpu_property_vectors_wrapped = FALSE;
 }
 
 extern _X_EXPORT int gAMDGPUEntityIndex;
@@ -146,6 +225,7 @@ static void AMDGPUFreeRec(ScrnInfoPtr pScrn)
 		pAMDGPUEnt = pPriv->ptr;
 		pAMDGPUEnt->fd_ref--;
 		if (!pAMDGPUEnt->fd_ref) {
+			amdgpu_unwrap_property_requests(pScrn);
 			amdgpu_device_deinitialize(pAMDGPUEnt->pDev);
 			amdgpu_kernel_close_fd(pAMDGPUEnt);
 			free(pPriv->ptr);
@@ -155,7 +235,6 @@ static void AMDGPUFreeRec(ScrnInfoPtr pScrn)
 
 	free(pEnt);
 }
-
 
 static inline struct amdgpu_window_priv *get_window_priv(WindowPtr win) {
 	return dixLookupPrivate(&win->devPrivates, &amdgpu_window_private_key);
@@ -2094,6 +2173,16 @@ Bool AMDGPUScreenInit_KMS(ScreenPtr pScreen, int argc, char **argv)
 	/* Note unused options */
 	if (serverGeneration == 1)
 		xf86ShowUnusedOptions(pScrn->scrnIndex, pScrn->options);
+
+	if (info->vrr_support) {
+		if (!amdgpu_property_vectors_wrapped) {
+			saved_change_property = ProcVector[X_ChangeProperty];
+			ProcVector[X_ChangeProperty] = amdgpu_change_property;
+			saved_delete_property = ProcVector[X_DeleteProperty];
+			ProcVector[X_DeleteProperty] = amdgpu_delete_property;
+			amdgpu_property_vectors_wrapped = TRUE;
+		}
+	}
 
 	drmmode_init(pScrn, &info->drmmode);
 
