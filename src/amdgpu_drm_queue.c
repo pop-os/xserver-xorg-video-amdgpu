@@ -325,7 +325,7 @@ void amdgpu_drm_wait_pending_flip(xf86CrtcPtr crtc)
 
 	while (drmmode_crtc->flip_pending
 	       && amdgpu_drm_handle_event(pAMDGPUEnt->fd,
-					  &drmmode_crtc->drmmode->event_context) > 0);
+					  &drmmode_crtc->drmmode->event_context) >= 0);
 }
 
 /*
