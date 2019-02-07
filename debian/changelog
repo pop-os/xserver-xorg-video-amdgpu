@@ -1,9 +1,9 @@
-xserver-xorg-video-amdgpu (18.1.99+git20190207-1) UNRELEASED; urgency=medium
+xserver-xorg-video-amdgpu (18.1.99+git20190207-1) unstable; urgency=medium
 
   * New upstream snapshot.
   * Stop passing --disable-silent-rules to configure.
 
- -- Andreas Boll <aboll@debian.org>  Thu, 07 Feb 2019 21:45:41 +0100
+ -- Andreas Boll <aboll@debian.org>  Thu, 07 Feb 2019 22:19:06 +0100
 
 xserver-xorg-video-amdgpu (18.1.0-1) unstable; urgency=medium
 
