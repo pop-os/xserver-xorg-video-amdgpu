@@ -1,0 +1,128 @@
+# IMAGE_TAG is the tag of the docker image used for the build jobs. If the
+# image doesn't exist yet, the docker-image stage generates it.
+#
+# In order to generate a new image, one should generally change the tag.
+# While removing the image from the registry would also work, that's not
+# recommended except for ephemeral images during development: Replacing an
+# image after a significant amount of time might pull in newer versions of
+# gcc/clang or other packages, which might break the build with older commits
+# using the same tag.
+#
+# After merging a change resulting in generating a new image to the main
+# repository, it's recommended to remove the image from the source repository's
+# container registry, so that the image from the main repository's registry
+# will be used there as well.
+variables:
+  IMAGE_TAG: "debian-testing-20181213"
+  IMAGE_LOCAL: "$CI_REGISTRY_IMAGE:$IMAGE_TAG"
+  IMAGE_MAIN: "registry.freedesktop.org/xorg/driver/$CI_PROJECT_NAME:$IMAGE_TAG"
+
+stages:
+  - docker-image
+  - build
+
+
+debian-testing:
+  stage: docker-image
+  image:
+    name: gcr.io/kaniko-project/executor:debug
+    entrypoint: [""]
+  script:
+    - echo "{\"auths\":{\"$CI_REGISTRY\":{\"username\":\"$CI_REGISTRY_USER\",\"password\":\"$CI_REGISTRY_PASSWORD\"}}}" > /kaniko/.docker/config.json
+    - mkdir kaniko-context
+    - |
+      echo "FROM $IMAGE_LOCAL" > kaniko-context/Dockerfile
+      # If the image exists in the local registry, skip to the build-and-test job
+      set +e
+      set -x
+      /kaniko/executor --context kaniko-context --no-push && exit 0
+      set +x
+      set -e
+    - |
+      echo "FROM $IMAGE_MAIN" > kaniko-context/Dockerfile
+      # Try to re-use the image from the main repository's registry, and if
+      # that fails, generate a local image from scratch
+      set +e
+      set -x
+      /kaniko/executor --context kaniko-context --destination $IMAGE_LOCAL && exit 0
+      set +x
+      set -e
+    - /kaniko/executor --context $CI_PROJECT_DIR/.gitlab-ci --destination $IMAGE_LOCAL
+
+
+image: $IMAGE_LOCAL
+
+# The default build instructions
+.default_build:
+  stage: build
+  script:
+  - ./autogen.sh
+  - make -j$(nproc) check V=1
+  variables:
+    CFLAGS: "-pipe -g -O2 -Werror"
+    ACLOCAL_PATH: /usr/local/xserver-$XSERVER_VERSION/share/aclocal
+    PKG_CONFIG_PATH: /usr/local/xserver-$XSERVER_VERSION/lib/pkgconfig
+
+xserver-1.20:
+  extends: .default_build
+  script:
+  - ./autogen.sh
+  - make -j$(nproc) check V=1
+  - make install V=1
+  - make -j$(nproc) distcheck
+  variables:
+    XSERVER_VERSION: "1.20"
+
+xserver-1.20-clang:
+  extends: .default_build
+  variables:
+    CC: clang
+    XSERVER_VERSION: "1.20"
+
+xserver-1.13:
+  extends: .default_build
+  script:
+  - ./autogen.sh --disable-glamor
+  - make -j$(nproc) check V=1
+  variables:
+    XSERVER_VERSION: "1.13"
+
+xserver-1.14:
+  extends: xserver-1.13
+  variables:
+    XSERVER_VERSION: "1.14"
+
+xserver-1.15:
+  extends: xserver-1.14
+  variables:
+    XSERVER_VERSION: "1.15"
+
+xserver-1.16:
+  extends: .default_build
+  variables:
+    XSERVER_VERSION: "1.16"
+
+xserver-1.17:
+  extends: .default_build
+  variables:
+    XSERVER_VERSION: "1.17"
+
+xserver-1.18:
+  extends: .default_build
+  variables:
+    XSERVER_VERSION: "1.18"
+
+xserver-1.18-clang:
+  extends: xserver-1.18
+  variables:
+    CC: clang
+
+xserver-1.19:
+  extends: .default_build
+  variables:
+    XSERVER_VERSION: "1.19"
+
+xserver-1.19-clang:
+  extends: xserver-1.19
+  variables:
+    CC: clang
