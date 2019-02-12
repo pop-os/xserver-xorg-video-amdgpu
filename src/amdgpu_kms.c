@@ -1551,11 +1551,13 @@ Bool AMDGPUPreInit_KMS(ScrnInfoPtr pScrn, int flags)
 		if (info->shadow_primary)
 			xf86DrvMsg(pScrn->scrnIndex, X_CONFIG, "ShadowPrimary enabled\n");
 
-		from = xf86GetOptValBool(info->Options, OPTION_VARIABLE_REFRESH,
-					 &info->vrr_support) ? X_CONFIG : X_DEFAULT;
+		if (!pScrn->is_gpu) {
+			from = xf86GetOptValBool(info->Options, OPTION_VARIABLE_REFRESH,
+						 &info->vrr_support) ? X_CONFIG : X_DEFAULT;
 
-		xf86DrvMsg(pScrn->scrnIndex, from, "VariableRefresh: %sabled\n",
-			   info->vrr_support ? "en" : "dis");
+			xf86DrvMsg(pScrn->scrnIndex, from, "VariableRefresh: %sabled\n",
+				   info->vrr_support ? "en" : "dis");
+		}
 	}
 
 	if (!pScrn->is_gpu) {
