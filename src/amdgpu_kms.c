@@ -365,7 +365,8 @@ static Bool AMDGPUCreateScreenResources_KMS(ScreenPtr pScreen)
 		}
 	}
 
-	if (!dixRegisterPrivateKey(&amdgpu_window_private_key,
+	if (info->vrr_support &&
+	    !dixRegisterPrivateKey(&amdgpu_window_private_key,
 				   PRIVATE_WINDOW,
 				   sizeof(struct amdgpu_window_priv)))
 		return FALSE;
