@@ -361,6 +361,7 @@ void AMDGPUWindowExposures_oneshot(WindowPtr pWin, RegionPtr pRegion
 				   );
 
 /* amdgpu_present.c */
+void amdgpu_present_set_screen_vrr(ScrnInfoPtr scrn, Bool vrr_enabled);
 Bool amdgpu_present_screen_init(ScreenPtr screen);
 
 /* amdgpu_sync.c */

@@ -102,7 +102,14 @@ static inline struct amdgpu_window_priv *get_window_priv(WindowPtr win) {
 static void
 amdgpu_vrr_property_update(WindowPtr window, Bool variable_refresh)
 {
+	ScrnInfoPtr scrn = xf86ScreenToScrn(window->drawable.pScreen);
+	AMDGPUInfoPtr info = AMDGPUPTR(scrn);
+
 	get_window_priv(window)->variable_refresh = variable_refresh;
+
+	if (info->flip_window == window &&
+	    info->drmmode.present_flipping)
+		amdgpu_present_set_screen_vrr(scrn, variable_refresh);
 }
 
 /* Wrapper for xserver/dix/property.c:ProcChangeProperty */

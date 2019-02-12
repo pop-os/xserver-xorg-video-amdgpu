@@ -90,7 +90,7 @@ amdgpu_present_get_ust_msc(RRCrtcPtr crtc, CARD64 *ust, CARD64 *msc)
 /*
  * Changes the variable refresh state for every CRTC on the screen.
  */
-static void
+void
 amdgpu_present_set_screen_vrr(ScrnInfoPtr scrn, Bool vrr_enabled)
 {
 	xf86CrtcConfigPtr config = XF86_CRTC_CONFIG_PTR(scrn);
