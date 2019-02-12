@@ -66,6 +66,7 @@ static DevPrivateKeyRec amdgpu_window_private_key;
 static DevScreenPrivateKeyRec amdgpu_client_private_key;
 DevScreenPrivateKeyRec amdgpu_device_private_key;
 
+static Atom amdgpu_vrr_atom;
 static Bool amdgpu_property_vectors_wrapped;
 static Bool restore_property_vector;
 static int (*saved_change_property) (ClientPtr client);
@@ -94,17 +95,47 @@ const OptionInfoRec *AMDGPUOptionsWeak(void)
 	return AMDGPUOptions_KMS;
 }
 
+static inline struct amdgpu_window_priv *get_window_priv(WindowPtr win) {
+	return dixLookupPrivate(&win->devPrivates, &amdgpu_window_private_key);
+}
+
+static void
+amdgpu_vrr_property_update(WindowPtr window, Bool variable_refresh)
+{
+	get_window_priv(window)->variable_refresh = variable_refresh;
+}
+
 /* Wrapper for xserver/dix/property.c:ProcChangeProperty */
 static int
 amdgpu_change_property(ClientPtr client)
 {
+	WindowPtr window;
 	int ret;
+
+	REQUEST(xChangePropertyReq);
 
 	client->requestVector[X_ChangeProperty] = saved_change_property;
 	ret = saved_change_property(client);
 
-	if (!restore_property_vector)
-		client->requestVector[X_ChangeProperty] = amdgpu_change_property;
+	if (restore_property_vector)
+		return ret;
+
+	client->requestVector[X_ChangeProperty] = amdgpu_change_property;
+
+	if (ret != Success)
+		return ret;
+
+	ret = dixLookupWindow(&window, stuff->window, client, DixSetPropAccess);
+	if (ret != Success)
+		return ret;
+
+	if (stuff->property == amdgpu_vrr_atom &&
+	    xf86ScreenToScrn(window->drawable.pScreen)->PreInit ==
+	    AMDGPUPreInit_KMS && stuff->format == 32 && stuff->nUnits == 1) {
+		uint32_t *value = (uint32_t*)(stuff + 1);
+
+		amdgpu_vrr_property_update(window, *value != 0);
+	}
 
 	return ret;
 }
@@ -113,13 +144,30 @@ amdgpu_change_property(ClientPtr client)
 static int
 amdgpu_delete_property(ClientPtr client)
 {
+	WindowPtr window;
 	int ret;
+
+	REQUEST(xDeletePropertyReq);
 
 	client->requestVector[X_DeleteProperty] = saved_delete_property;
 	ret = saved_delete_property(client);
 
-	if (!restore_property_vector)
-		client->requestVector[X_DeleteProperty] = amdgpu_delete_property;
+	if (restore_property_vector)
+		return ret;
+
+	client->requestVector[X_DeleteProperty] = amdgpu_delete_property;
+
+	if (ret != Success)
+		return ret;
+
+	ret = dixLookupWindow(&window, stuff->window, client, DixSetPropAccess);
+	if (ret != Success)
+		return ret;
+
+	if (stuff->property == amdgpu_vrr_atom &&
+	    xf86ScreenToScrn(window->drawable.pScreen)->PreInit ==
+	    AMDGPUPreInit_KMS)
+		amdgpu_vrr_property_update(window, FALSE);
 
 	return ret;
 }
@@ -236,51 +284,6 @@ static void AMDGPUFreeRec(ScrnInfoPtr pScrn)
 	free(pEnt);
 }
 
-static inline struct amdgpu_window_priv *get_window_priv(WindowPtr win) {
-	return dixLookupPrivate(&win->devPrivates, &amdgpu_window_private_key);
-}
-
-static void
-amdgpu_property_notify(ClientPtr client,
-		       XID id,
-		       int state,
-		       ATOM property_name)
-{
-	WindowPtr win;
-	PropertyPtr prop;
-	struct amdgpu_window_priv *priv;
-	const char* str;
-	int res;
-
-	res = dixLookupWindow(&win, id, client, DixReadAccess);
-	if (res != Success)
-		return;
-
-	str = NameForAtom(property_name);
-	if (str == NULL)
-		return;
-
-	if (strcmp(str, "_VARIABLE_REFRESH") != 0)
-		return;
-
-	priv = get_window_priv(win);
-	if (!priv)
-		return;
-
-	priv->variable_refresh = 0;
-
-	res = dixLookupProperty(&prop,
-				win,
-				property_name,
-				client,
-				DixReadAccess);
-
-	if (res == Success && prop->format == 32 && prop->size == 1) {
-		uint32_t value = *(uint32_t*)prop->data;
-		priv->variable_refresh = (value != 0);
-	}
-}
-
 Bool amdgpu_window_has_variable_refresh(WindowPtr win) {
 	struct amdgpu_window_priv *priv = get_window_priv(win);
 
@@ -327,17 +330,6 @@ amdgpu_event_callback(CallbackListPtr *list,
 				       &amdgpu_client_private_key, pScreen);
 	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
 	int i;
-
-	if (info->vrr_support) {
-		for (i = 0; i < eventinfo->count; i++) {
-			xEventPtr ev = &eventinfo->events[i];
-			if (ev->u.u.type == PropertyNotify)
-				amdgpu_property_notify(eventinfo->client,
-						       ev->u.property.window,
-						       ev->u.property.state,
-						       ev->u.property.atom);
-		}
-	}
 
 	if (callback_needs_flush(info, client_priv) ||
 	    callback_needs_flush(info, server_priv))
@@ -2182,6 +2174,9 @@ Bool AMDGPUScreenInit_KMS(ScreenPtr pScreen, int argc, char **argv)
 			ProcVector[X_DeleteProperty] = amdgpu_delete_property;
 			amdgpu_property_vectors_wrapped = TRUE;
 		}
+
+		amdgpu_vrr_atom = MakeAtom("_VARIABLE_REFRESH",
+					   strlen("_VARIABLE_REFRESH"), TRUE);
 	}
 
 	drmmode_init(pScrn, &info->drmmode);
