@@ -24,10 +24,6 @@ stages:
 
 debian-testing:
   stage: docker-image
-  only:
-    changes:
-      - .gitlab-ci.yml
-      - .gitlab-ci/Dockerfile
   image:
     name: gcr.io/kaniko-project/executor:debug
     entrypoint: [""]
