@@ -884,12 +884,18 @@ CARD32 amdgpu_dri2_deferred_event(OsTimerPtr timer, CARD32 now, pointer data)
 	if (ret) {
 		xf86DrvMsg(scrn->scrnIndex, X_ERROR,
 			   "%s cannot get current time\n", __func__);
-		if (event_info->drm_queue_seq)
+
+		if (event_info->drm_queue_seq) {
 			drmmode_crtc->drmmode->event_context.
 				vblank_handler(pAMDGPUEnt->fd, 0, 0, 0,
 					       (void*)event_info->drm_queue_seq);
-		else
+			drmmode_crtc->wait_flip_nesting_level++;
+			amdgpu_drm_queue_handle_deferred(crtc);
+
+		} else {
 			amdgpu_dri2_frame_event_handler(crtc, 0, 0, data);
+		}
+
 		return 0;
 	}
 	/*
@@ -900,13 +906,18 @@ CARD32 amdgpu_dri2_deferred_event(OsTimerPtr timer, CARD32 now, pointer data)
 	delta_seq = delta_t * drmmode_crtc->dpms_last_fps;
 	delta_seq /= 1000000;
 	frame = (CARD64) drmmode_crtc->dpms_last_seq + delta_seq;
-	if (event_info->drm_queue_seq)
+
+	if (event_info->drm_queue_seq) {
 		drmmode_crtc->drmmode->event_context.
 			vblank_handler(pAMDGPUEnt->fd, frame, drm_now / 1000000,
 				       drm_now % 1000000,
 				       (void*)event_info->drm_queue_seq);
-	else
+		drmmode_crtc->wait_flip_nesting_level++;
+		amdgpu_drm_queue_handle_deferred(crtc);
+	} else {
 		amdgpu_dri2_frame_event_handler(crtc, frame, drm_now, data);
+	}
+
 	return 0;
 }
 
