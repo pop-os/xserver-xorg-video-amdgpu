@@ -827,14 +827,6 @@ static enum drmmode_cm_prop get_cm_enum_from_str(const char *prop_name)
 }
 
 /**
- * Return TRUE if kernel supports non-legacy color management.
- */
-static Bool drmmode_cm_enabled(drmmode_ptr drmmode)
-{
-	return drmmode->cm_prop_ids[CM_GAMMA_LUT_SIZE] != 0;
-}
-
-/**
  * If legacy LUT is a, and non-legacy LUT is b, then the result of b(a(x)) is
  * returned in out_lut. out_lut's length is expected to be the same as the
  * non-legacy LUT b.
