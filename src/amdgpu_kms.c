@@ -1595,6 +1595,12 @@ Bool AMDGPUPreInit_KMS(ScrnInfoPtr pScrn, int flags)
 
 	info->dri2.available = FALSE;
 	info->dri2.enabled = FALSE;
+	info->dri2.pKernelDRMVersion = drmGetVersion(pAMDGPUEnt->fd);
+	if (info->dri2.pKernelDRMVersion == NULL) {
+		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+			   "AMDGPUDRIGetVersion failed to get the DRM version\n");
+		return FALSE;
+	}
 
 	/* Get ScreenInit function */
 	if (!xf86LoadSubModule(pScrn, "fb"))
