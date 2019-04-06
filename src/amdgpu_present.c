@@ -90,7 +90,7 @@ amdgpu_present_get_ust_msc(RRCrtcPtr crtc, CARD64 *ust, CARD64 *msc)
 /*
  * Changes the variable refresh state for every CRTC on the screen.
  */
-static void
+void
 amdgpu_present_set_screen_vrr(ScrnInfoPtr scrn, Bool vrr_enabled)
 {
 	xf86CrtcConfigPtr config = XF86_CRTC_CONFIG_PTR(scrn);
@@ -255,6 +255,7 @@ amdgpu_present_check_flip(RRCrtcPtr crtc, WindowPtr window, PixmapPtr pixmap,
 	xf86CrtcPtr xf86_crtc = crtc->devPrivate;
 	ScreenPtr screen = window->drawable.pScreen;
 	ScrnInfoPtr scrn = xf86_crtc->scrn;
+	PixmapPtr screen_pixmap = screen->GetScreenPixmap(screen);
 	xf86CrtcConfigPtr config = XF86_CRTC_CONFIG_PTR(scrn);
 	AMDGPUInfoPtr info = AMDGPUPTR(scrn);
 	int num_crtcs_on;
@@ -272,12 +273,23 @@ amdgpu_present_check_flip(RRCrtcPtr crtc, WindowPtr window, PixmapPtr pixmap,
 	if (info->drmmode.dri2_flipping)
 		return FALSE;
 
-	/* The kernel driver doesn't handle flipping between BOs with different
-	 * tiling parameters correctly yet
-	 */
-	if (amdgpu_pixmap_get_tiling_info(pixmap) !=
-	    amdgpu_pixmap_get_tiling_info(screen->GetScreenPixmap(screen)))
+#if XORG_VERSION_CURRENT <= XORG_VERSION_NUMERIC(1, 20, 99, 1, 0)
+	if (pixmap->devKind != screen_pixmap->devKind)
 		return FALSE;
+#endif
+
+	/* Only DC supports advanced color management features, so we can use
+	 * drmmode_cm_enabled as a proxy for "Is DC enabled?"
+	 */
+	if (info->dri2.pKernelDRMVersion->version_minor < 31 ||
+	    !drmmode_cm_enabled(&info->drmmode)) {
+		/* The kernel driver doesn't handle flipping between BOs with
+		 * different tiling parameters correctly
+		 */
+		if (amdgpu_pixmap_get_tiling_info(pixmap) !=
+		    amdgpu_pixmap_get_tiling_info(screen_pixmap))
+			return FALSE;
+	}
 
 	for (i = 0, num_crtcs_on = 0; i < config->num_crtc; i++) {
 		if (drmmode_crtc_can_flip(config->crtc[i]))

@@ -163,6 +163,9 @@ typedef struct {
 	drmModeConnectorPtr mode_output;
 	drmModeEncoderPtr *mode_encoders;
 	drmModePropertyBlobPtr edid_blob;
+#if XORG_VERSION_CURRENT >= XORG_VERSION_NUMERIC(1, 17, 99, 901, 0)
+	drmModePropertyBlobPtr tile_blob;
+#endif
 	int dpms_enum_id;
 	int num_props;
 	drmmode_prop_ptr props;
@@ -181,6 +184,15 @@ enum drmmode_flip_sync {
     FLIP_ASYNC,
 };
 
+
+/**
+ * Return TRUE if kernel supports non-legacy color management.
+ */
+static inline Bool
+drmmode_cm_enabled(drmmode_ptr drmmode)
+{
+	return drmmode->cm_prop_ids[CM_GAMMA_LUT_SIZE] != 0;
+}
 
 /* Can the page flip ioctl be used for this CRTC? */
 static inline Bool
