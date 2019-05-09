@@ -36,6 +36,7 @@ struct amdgpu_pixmap {
 
 	struct amdgpu_buffer *bo;
 	struct drmmode_fb *fb;
+	Bool fb_failed;
 
 	/* GEM handle for pixmaps shared via DRI2/3 */
 	Bool handle_valid;

@@ -255,6 +255,7 @@ amdgpu_present_check_flip(RRCrtcPtr crtc, WindowPtr window, PixmapPtr pixmap,
 	xf86CrtcPtr xf86_crtc = crtc->devPrivate;
 	ScreenPtr screen = window->drawable.pScreen;
 	ScrnInfoPtr scrn = xf86_crtc->scrn;
+	struct amdgpu_pixmap *priv = amdgpu_get_pixmap_private(pixmap);
 	PixmapPtr screen_pixmap = screen->GetScreenPixmap(screen);
 	xf86CrtcConfigPtr config = XF86_CRTC_CONFIG_PTR(scrn);
 	AMDGPUInfoPtr info = AMDGPUPTR(scrn);
@@ -277,6 +278,23 @@ amdgpu_present_check_flip(RRCrtcPtr crtc, WindowPtr window, PixmapPtr pixmap,
 	if (pixmap->devKind != screen_pixmap->devKind)
 		return FALSE;
 #endif
+
+	if (priv && priv->fb_failed)
+		return FALSE;
+
+	if (!amdgpu_pixmap_get_fb(pixmap)) {
+		if (!priv)
+			priv = amdgpu_get_pixmap_private(pixmap);
+
+		if (priv && !priv->fb_failed) {
+			xf86DrvMsg(scrn->scrnIndex, X_WARNING,
+				   "Cannot get FB for Present flip (may be "
+				   "normal if using PRIME render offloading)\n");
+			priv->fb_failed = TRUE;
+		}
+
+		return FALSE;
+	}
 
 	/* Only DC supports advanced color management features, so we can use
 	 * drmmode_cm_enabled as a proxy for "Is DC enabled?"
