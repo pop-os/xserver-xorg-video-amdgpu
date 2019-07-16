@@ -84,10 +84,6 @@ static char *amdgpu_bus_id(ScrnInfoPtr pScrn, struct pci_device *dev)
 	XNFasprintf(&busid, "pci:%04x:%02x:%02x.%u",
 		    dev->domain, dev->bus, dev->dev, dev->func);
 
-	if (!busid)
-		xf86DrvMsgVerb(pScrn->scrnIndex, X_ERROR, 0,
-			       "AMDGPU: Failed to generate bus ID string\n");
-
 	return busid;
 }
 
@@ -145,8 +141,6 @@ static int amdgpu_kernel_open_fd(ScrnInfoPtr pScrn,
 		dev = pci_dev;
 
 	busid = amdgpu_bus_id(pScrn, dev);
-	if (!busid)
-		return -1;
 
 	if (!amdgpu_kernel_mode_enabled(pScrn, busid)) {
 		free(busid);
