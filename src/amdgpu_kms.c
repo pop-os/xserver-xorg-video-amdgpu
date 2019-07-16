@@ -283,6 +283,7 @@ static void AMDGPUFreeRec(ScrnInfoPtr pScrn)
 			amdgpu_unwrap_property_requests(pScrn);
 			amdgpu_device_deinitialize(pAMDGPUEnt->pDev);
 			amdgpu_kernel_close_fd(pAMDGPUEnt);
+			free(pAMDGPUEnt->busid);
 			free(pPriv->ptr);
 			pPriv->ptr = NULL;
 		}

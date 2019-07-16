@@ -77,19 +77,11 @@ static void AMDGPUIdentify(int flags)
 	xf86PrintChipsets(AMDGPU_NAME, "Driver for AMD Radeon", AMDGPUAny);
 }
 
-static char *amdgpu_bus_id(ScrnInfoPtr pScrn, struct pci_device *dev)
-{
-	char *busid;
-
-	XNFasprintf(&busid, "pci:%04x:%02x:%02x.%u",
-		    dev->domain, dev->bus, dev->dev, dev->func);
-
-	return busid;
-}
-
-static Bool amdgpu_kernel_mode_enabled(ScrnInfoPtr pScrn, char *busIdString)
+static Bool amdgpu_kernel_mode_enabled(ScrnInfoPtr pScrn)
 {
 #if defined(__FreeBSD__) || defined(__FreeBSD_kernel__)
+	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(pScrn);
+	const char *busIdString = pAMDGPUEnt->busid;
 	int ret = drmCheckModesettingSupported(busIdString);
 
 	if (ret) {
@@ -110,12 +102,20 @@ static Bool amdgpu_kernel_mode_enabled(ScrnInfoPtr pScrn, char *busIdString)
 
 static int amdgpu_kernel_open_fd(ScrnInfoPtr pScrn,
 				 struct pci_device *pci_dev,
-				 struct xf86_platform_device *platform_dev)
+				 struct xf86_platform_device *platform_dev,
+				 AMDGPUEntPtr pAMDGPUEnt)
 {
 	struct pci_device *dev;
 	const char *path;
-	char *busid;
 	int fd;
+
+	if (platform_dev)
+		dev = platform_dev->pdev;
+	else
+		dev = pci_dev;
+
+	XNFasprintf(&pAMDGPUEnt->busid, "pci:%04x:%02x:%02x.%u",
+		    dev->domain, dev->bus, dev->dev, dev->func);
 
 	if (platform_dev) {
 #ifdef ODEV_ATTRIB_FD
@@ -135,24 +135,14 @@ static int amdgpu_kernel_open_fd(ScrnInfoPtr pScrn,
 #endif
 	}
 
-	if (platform_dev)
-		dev = platform_dev->pdev;
-	else
-		dev = pci_dev;
-
-	busid = amdgpu_bus_id(pScrn, dev);
-
-	if (!amdgpu_kernel_mode_enabled(pScrn, busid)) {
-		free(busid);
+	if (!amdgpu_kernel_mode_enabled(pScrn))
 		return -1;
-	}
 
-	fd = drmOpen(NULL, busid);
+	fd = drmOpen(NULL, pAMDGPUEnt->busid);
 	if (fd == -1)
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
 			   "[drm] Failed to open DRM device for %s: %s\n",
-			   busid, strerror(errno));
-	free(busid);
+			   pAMDGPUEnt->busid, strerror(errno));
 	return fd;
 }
 
@@ -172,7 +162,7 @@ static Bool amdgpu_open_drm_master(ScrnInfoPtr pScrn, AMDGPUEntPtr pAMDGPUEnt,
 	drmSetVersion sv;
 	int err;
 
-	pAMDGPUEnt->fd = amdgpu_kernel_open_fd(pScrn, pci_dev, NULL);
+	pAMDGPUEnt->fd = amdgpu_kernel_open_fd(pScrn, pci_dev, NULL, pAMDGPUEnt);
 	if (pAMDGPUEnt->fd == -1)
 		return FALSE;
 
@@ -364,7 +354,7 @@ amdgpu_platform_probe(DriverPtr pDriver,
 		pPriv->ptr = xnfcalloc(sizeof(AMDGPUEntRec), 1);
 		pAMDGPUEnt = pPriv->ptr;
 		pAMDGPUEnt->platform_dev = dev;
-		pAMDGPUEnt->fd = amdgpu_kernel_open_fd(pScrn, NULL, dev);
+		pAMDGPUEnt->fd = amdgpu_kernel_open_fd(pScrn, NULL, dev, pAMDGPUEnt);
 		if (pAMDGPUEnt->fd < 0)
 			goto error;
 
