@@ -3432,7 +3432,7 @@ Bool drmmode_pre_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode, int cpp)
 	unsigned int crtcs_needed = 0;
 	unsigned int crtcs_got = 0;
 	drmModeResPtr mode_res;
-	char *bus_id_string, *provider_name;
+	char *provider_name;
 
 	xf86CrtcConfigInit(pScrn, &drmmode_xf86crtc_config_funcs);
 
@@ -3495,9 +3495,7 @@ Bool drmmode_pre_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode, int cpp)
 	/* workout clones */
 	drmmode_clones_init(pScrn, drmmode, mode_res);
 
-	bus_id_string = DRICreatePCIBusID(info->PciInfo);
-	XNFasprintf(&provider_name, "%s @ %s", pScrn->chipset, bus_id_string);
-	free(bus_id_string);
+	XNFasprintf(&provider_name, "%s @ %s", pScrn->chipset, pAMDGPUEnt->busid);
 	xf86ProviderSetup(pScrn, NULL, provider_name);
 	free(provider_name);
 
