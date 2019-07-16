@@ -248,8 +248,6 @@ extern DevScreenPrivateKeyRec amdgpu_device_private_key;
 
 typedef struct {
 	EntityInfoPtr pEnt;
-	struct pci_device *PciInfo;
-	int Chipset;
 	uint32_t family;
 	struct gbm_device *gbm;
 

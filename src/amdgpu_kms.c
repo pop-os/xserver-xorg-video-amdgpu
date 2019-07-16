@@ -1421,20 +1421,13 @@ static Bool AMDGPUPreInitChipType_KMS(ScrnInfoPtr pScrn,
 	AMDGPUInfoPtr info = AMDGPUPTR(pScrn);
 	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(pScrn);
 
-	info->Chipset = info->PciInfo->device_id;
 	pScrn->chipset = (char*)amdgpu_get_marketing_name(pAMDGPUEnt->pDev);
 	if (!pScrn->chipset)
 		pScrn->chipset = "Unknown AMD Radeon GPU";
 
-	if (info->Chipset < 0) {
-		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-			   "Chipset \"%s\" is not recognized\n",
-			   pScrn->chipset);
-		return FALSE;
-	}
 	xf86DrvMsg(pScrn->scrnIndex, X_PROBED,
 		   "Chipset: \"%s\" (ChipID = 0x%04x)\n",
-		   pScrn->chipset, info->Chipset);
+		   pScrn->chipset, gpu_info->asic_id);
 
 	info->family = gpu_info->family_id;
 
@@ -1576,7 +1569,6 @@ Bool AMDGPUPreInit_KMS(ScrnInfoPtr pScrn, int flags)
 		xf86SetPrimInitDone(pScrn->entityList[0]);
 	}
 
-	info->PciInfo = xf86GetPciInfoForEntity(info->pEnt->index);
 	pScrn->monitor = pScrn->confScreen->monitor;
 
 	if (!AMDGPUPreInitVisual(pScrn))
