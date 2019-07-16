@@ -81,7 +81,7 @@ static char *amdgpu_bus_id(ScrnInfoPtr pScrn, struct pci_device *dev)
 {
 	char *busid;
 
-	XNFasprintf(&busid, "pci:%04x:%02x:%02x.%d",
+	XNFasprintf(&busid, "pci:%04x:%02x:%02x.%u",
 		    dev->domain, dev->bus, dev->dev, dev->func);
 
 	if (!busid)
