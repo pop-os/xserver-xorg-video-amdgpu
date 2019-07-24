@@ -274,9 +274,6 @@ amdgpu_present_check_flip(RRCrtcPtr crtc, WindowPtr window, PixmapPtr pixmap,
 	if (info->drmmode.dri2_flipping)
 		return FALSE;
 
-	if (pixmap->devKind != screen_pixmap->devKind)
-		return FALSE;
-
 	if (priv && priv->fb_failed)
 		return FALSE;
 
@@ -300,8 +297,11 @@ amdgpu_present_check_flip(RRCrtcPtr crtc, WindowPtr window, PixmapPtr pixmap,
 	if (info->dri2.pKernelDRMVersion->version_minor < 31 ||
 	    !drmmode_cm_enabled(&info->drmmode)) {
 		/* The kernel driver doesn't handle flipping between BOs with
-		 * different tiling parameters correctly
+		 * different pitch / tiling parameters correctly
 		 */
+		if (pixmap->devKind != screen_pixmap->devKind)
+			return FALSE;
+
 		if (amdgpu_pixmap_get_tiling_info(pixmap) !=
 		    amdgpu_pixmap_get_tiling_info(screen_pixmap))
 			return FALSE;
