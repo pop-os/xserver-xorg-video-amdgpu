@@ -260,6 +260,7 @@ amdgpu_present_check_flip(RRCrtcPtr crtc, WindowPtr window, PixmapPtr pixmap,
 	xf86CrtcConfigPtr config = XF86_CRTC_CONFIG_PTR(scrn);
 	AMDGPUInfoPtr info = AMDGPUPTR(scrn);
 	int num_crtcs_on;
+	Bool dc_enabled;
 	int i;
 
 	if (!scrn->vtSema)
@@ -294,14 +295,20 @@ amdgpu_present_check_flip(RRCrtcPtr crtc, WindowPtr window, PixmapPtr pixmap,
 	/* Only DC supports advanced color management features, so we can use
 	 * drmmode_cm_enabled as a proxy for "Is DC enabled?"
 	 */
-	if (info->dri2.pKernelDRMVersion->version_minor < 31 ||
-	    !drmmode_cm_enabled(&info->drmmode)) {
+	dc_enabled = drmmode_cm_enabled(&info->drmmode);
+
+	if (info->dri2.pKernelDRMVersion->version_minor < (dc_enabled ? 31 : 34)) {
 		/* The kernel driver doesn't handle flipping between BOs with
-		 * different pitch / tiling parameters correctly
+		 * different pitch correctly
 		 */
 		if (pixmap->devKind != screen_pixmap->devKind)
 			return FALSE;
+	}
 
+	if (!dc_enabled || info->dri2.pKernelDRMVersion->version_minor < 31) {
+		/* The kernel driver doesn't handle flipping between BOs with
+		 * different tiling parameters correctly
+		 */
 		if (amdgpu_pixmap_get_tiling_info(pixmap) !=
 		    amdgpu_pixmap_get_tiling_info(screen_pixmap))
 			return FALSE;
