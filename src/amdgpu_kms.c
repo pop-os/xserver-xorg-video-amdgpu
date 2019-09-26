@@ -2240,14 +2240,23 @@ Bool AMDGPUEnterVT_KMS(ScrnInfoPtr pScrn)
 }
 
 static void
-pixmap_unref_fb(void *value, XID id, void *cdata)
+pixmap_unref_fb(PixmapPtr pixmap)
 {
-	PixmapPtr pixmap = value;
-	AMDGPUEntPtr pAMDGPUEnt = cdata;
+	ScrnInfoPtr scrn = xf86ScreenToScrn(pixmap->drawable.pScreen);
 	struct drmmode_fb **fb_ptr = amdgpu_pixmap_get_fb_ptr(pixmap);
+	AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(scrn);
 
 	if (fb_ptr)
 		drmmode_fb_reference(pAMDGPUEnt->fd, fb_ptr, NULL);
+}
+
+static void
+client_pixmap_unref_fb(void *value, XID id, void *pScreen)
+{
+	PixmapPtr pixmap = value;
+
+	if (pixmap->drawable.pScreen == pScreen)
+		pixmap_unref_fb(pixmap);
 }
 
 void AMDGPULeaveVT_KMS(ScrnInfoPtr pScrn)
@@ -2311,11 +2320,9 @@ void AMDGPULeaveVT_KMS(ScrnInfoPtr pScrn)
 
 						if (pScrn->is_gpu) {
 							if (drmmode_crtc->scanout[0].pixmap)
-								pixmap_unref_fb(drmmode_crtc->scanout[0].pixmap,
-										None, pAMDGPUEnt);
+								pixmap_unref_fb(drmmode_crtc->scanout[0].pixmap);
 							if (drmmode_crtc->scanout[1].pixmap)
-								pixmap_unref_fb(drmmode_crtc->scanout[1].pixmap,
-										None, pAMDGPUEnt);
+								pixmap_unref_fb(drmmode_crtc->scanout[1].pixmap);
 						} else {
 							drmmode_crtc_scanout_free(crtc);
 						}
@@ -2335,11 +2342,11 @@ void AMDGPULeaveVT_KMS(ScrnInfoPtr pScrn)
 			    (!clients[i] || clients[i]->clientState != ClientStateRunning))
 				continue;
 
-			FindClientResourcesByType(clients[i], RT_PIXMAP, pixmap_unref_fb,
-						  pAMDGPUEnt);
+			FindClientResourcesByType(clients[i], RT_PIXMAP,
+						  client_pixmap_unref_fb, pScreen);
 		}
 
-		pixmap_unref_fb(pScreen->GetScreenPixmap(pScreen), None, pAMDGPUEnt);
+		pixmap_unref_fb(pScreen->GetScreenPixmap(pScreen));
 	} else {
 		memset(info->front_buffer->cpu_ptr, 0, pScrn->virtualX *
 		       info->pixel_bytes * pScrn->virtualY);
