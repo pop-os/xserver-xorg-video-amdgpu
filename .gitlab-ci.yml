@@ -13,9 +13,16 @@
 # container registry, so that the image from the main repository's registry
 # will be used there as well.
 variables:
-  IMAGE_TAG: "debian-testing-20181213"
-  IMAGE_LOCAL: "$CI_REGISTRY_IMAGE:$IMAGE_TAG"
-  IMAGE_MAIN: "registry.freedesktop.org/xorg/driver/xf86-video-amdgpu:$IMAGE_TAG"
+  UPSTREAM_REPO: xorg/driver/xf86-video-amdgpu
+  DEBIAN_VERSION: testing-slim
+  DEBIAN_EXEC: 'bash .gitlab-ci/debian-install.sh'
+  DEBIAN_TAG: "2019-08-02"
+  IMAGE_LOCAL: "$CI_REGISTRY_IMAGE/debian/$DEBIAN_VERSION:$DEBIAN_TAG"
+
+include:
+  - project: 'wayland/ci-templates'
+    ref: adfcd8c318d3398d0547960e45daa34d3b48bce6
+    file: '/templates/debian.yml'
 
 stages:
   - docker-image
@@ -23,31 +30,8 @@ stages:
 
 
 debian-testing:
+  extends: .debian@container-ifnot-exists
   stage: docker-image
-  image:
-    name: gcr.io/kaniko-project/executor:debug
-    entrypoint: [""]
-  script:
-    - echo "{\"auths\":{\"$CI_REGISTRY\":{\"username\":\"$CI_REGISTRY_USER\",\"password\":\"$CI_REGISTRY_PASSWORD\"}}}" > /kaniko/.docker/config.json
-    - mkdir kaniko-context
-    - |
-      echo "FROM $IMAGE_LOCAL" > kaniko-context/Dockerfile
-      # If the image exists in the local registry, skip to the build-and-test job
-      set +e
-      set -x
-      /kaniko/executor --context kaniko-context --no-push && exit 0
-      set +x
-      set -e
-    - |
-      echo "FROM $IMAGE_MAIN" > kaniko-context/Dockerfile
-      # Try to re-use the image from the main repository's registry, and if
-      # that fails, generate a local image from scratch
-      set +e
-      set -x
-      /kaniko/executor --context kaniko-context --destination $IMAGE_LOCAL && exit 0
-      set +x
-      set -e
-    - /kaniko/executor --context $CI_PROJECT_DIR/.gitlab-ci --destination $IMAGE_LOCAL
 
 
 image: $IMAGE_LOCAL
