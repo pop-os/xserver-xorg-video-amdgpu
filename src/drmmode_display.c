@@ -1784,7 +1784,7 @@ static void drmmode_show_cursor(xf86CrtcPtr crtc)
 		arg.hot_y = yhot;
 
 		ret = drmIoctl(pAMDGPUEnt->fd, DRM_IOCTL_MODE_CURSOR2, &arg);
-		if (ret == -EINVAL)
+		if (ret == -1 && errno == EINVAL)
 			use_set_cursor2 = FALSE;
 		else
 			return;
