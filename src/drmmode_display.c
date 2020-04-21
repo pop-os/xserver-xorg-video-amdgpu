@@ -97,42 +97,6 @@ AMDGPUZaphodStringMatches(ScrnInfoPtr pScrn, const char *s, char *output_name)
 }
 
 
-static PixmapPtr drmmode_create_bo_pixmap(ScrnInfoPtr pScrn,
-					  int width, int height,
-					  int depth, int bpp,
-					  int pitch,
-					  struct amdgpu_buffer *bo)
-{
-	ScreenPtr pScreen = pScrn->pScreen;
-	PixmapPtr pixmap;
-
-	pixmap = (*pScreen->CreatePixmap)(pScreen, 0, 0, depth,
-					  AMDGPU_CREATE_PIXMAP_SCANOUT);
-	if (!pixmap)
-		return NULL;
-
-	if (!(*pScreen->ModifyPixmapHeader) (pixmap, width, height,
-					     depth, bpp, pitch, NULL))
-		goto fail;
-
-	if (!amdgpu_glamor_create_textured_pixmap(pixmap, bo))
-		goto fail;
-
-	if (amdgpu_set_pixmap_bo(pixmap, bo))
-		return pixmap;
-
-fail:
-	pScreen->DestroyPixmap(pixmap);
-	return NULL;
-}
-
-static void drmmode_destroy_bo_pixmap(PixmapPtr pixmap)
-{
-	ScreenPtr pScreen = pixmap->drawable.pScreen;
-
-	(*pScreen->DestroyPixmap) (pixmap);
-}
-
 static void
 drmmode_ConvertFromKMode(ScrnInfoPtr scrn,
 			 drmModeModeInfo * kmode, DisplayModePtr mode)
@@ -508,16 +472,11 @@ void
 drmmode_crtc_scanout_destroy(drmmode_ptr drmmode,
 			     struct drmmode_scanout *scanout)
 {
+	if (!scanout->pixmap)
+		return;
 
-	if (scanout->pixmap) {
-		drmmode_destroy_bo_pixmap(scanout->pixmap);
-		scanout->pixmap = NULL;
-	}
-
-	if (scanout->bo) {
-		amdgpu_bo_unref(&scanout->bo);
-		scanout->bo = NULL;
-	}
+	scanout->pixmap->drawable.pScreen->DestroyPixmap(scanout->pixmap);
+	scanout->pixmap = NULL;
 }
 
 void
@@ -548,38 +507,25 @@ drmmode_crtc_scanout_create(xf86CrtcPtr crtc, struct drmmode_scanout *scanout,
 	ScrnInfoPtr pScrn = crtc->scrn;
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
 	drmmode_ptr drmmode = drmmode_crtc->drmmode;
-	int pitch;
+	ScreenPtr screen = pScrn->pScreen;
 
 	if (scanout->pixmap) {
-		if (scanout->width == width && scanout->height == height)
+		if (scanout->pixmap->drawable.width == width &&
+		    scanout->pixmap->drawable.height == height)
 			return scanout->pixmap;
 
 		drmmode_crtc_scanout_destroy(drmmode, scanout);
 	}
 
-	scanout->bo = amdgpu_alloc_pixmap_bo(pScrn, width, height, pScrn->depth,
-					     AMDGPU_CREATE_PIXMAP_SCANOUT,
-					     pScrn->bitsPerPixel, &pitch);
-	if (!scanout->bo) {
-		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-			   "Failed to allocate scanout buffer memory\n");
-		return NULL;
-	}
-
-	scanout->pixmap = drmmode_create_bo_pixmap(pScrn,
-						 width, height,
-						 pScrn->depth,
-						 pScrn->bitsPerPixel,
-						 pitch, scanout->bo);
+	scanout->pixmap = screen->CreatePixmap(screen, width, height,
+					       pScrn->depth,
+					       AMDGPU_CREATE_PIXMAP_SCANOUT);
 	if (!scanout->pixmap) {
 		ErrorF("failed to create CRTC scanout pixmap\n");
 		goto error;
 	}
 
-	if (amdgpu_pixmap_get_fb(scanout->pixmap)) {
-		scanout->width = width;
-		scanout->height = height;
-	} else {
+	if (!amdgpu_pixmap_get_fb(scanout->pixmap)) {
 		ErrorF("failed to create CRTC scanout FB\n");
 error:		
 		drmmode_crtc_scanout_destroy(drmmode, scanout);

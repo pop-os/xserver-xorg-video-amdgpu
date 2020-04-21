@@ -97,9 +97,7 @@ enum drmmode_scanout_status {
 };
 
 struct drmmode_scanout {
-	struct amdgpu_buffer *bo;
 	PixmapPtr pixmap;
-	int width, height;
 };
 
 typedef struct {
@@ -202,9 +200,9 @@ drmmode_crtc_can_flip(xf86CrtcPtr crtc)
 
 	return crtc->enabled &&
 		drmmode_crtc->dpms_mode == DPMSModeOn &&
-		!drmmode_crtc->rotate.bo &&
+		!drmmode_crtc->rotate.pixmap &&
 		(drmmode_crtc->tear_free ||
-		 !drmmode_crtc->scanout[drmmode_crtc->scanout_id].bo);
+		 !drmmode_crtc->scanout[drmmode_crtc->scanout_id].pixmap);
 }
 
 

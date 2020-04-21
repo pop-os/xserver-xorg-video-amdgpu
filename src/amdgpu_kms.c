@@ -2269,7 +2269,7 @@ void AMDGPULeaveVT_KMS(ScrnInfoPtr pScrn)
 	if (!info->shadow_fb) {
 		AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(pScrn);
 		xf86CrtcConfigPtr xf86_config = XF86_CRTC_CONFIG_PTR(pScrn);
-		struct drmmode_scanout black_scanout = { .pixmap = NULL, .bo = NULL };
+		struct drmmode_scanout black_scanout = { .pixmap = NULL };
 		xf86CrtcPtr crtc;
 		drmmode_crtc_private_ptr drmmode_crtc;
 		unsigned w = 0, h = 0;
