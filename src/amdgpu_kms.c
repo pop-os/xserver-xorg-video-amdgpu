@@ -2207,6 +2207,7 @@ Bool AMDGPUEnterVT_KMS(ScrnInfoPtr pScrn)
 		struct amdgpu_buffer *front_buffer =
 			amdgpu_alloc_pixmap_bo(pScrn, pScrn->virtualX,
 					       pScrn->virtualY, pScrn->depth,
+					       AMDGPU_CREATE_PIXMAP_SCANOUT |
 					       AMDGPU_CREATE_PIXMAP_LINEAR,
 					       pScrn->bitsPerPixel,
 					       &pitch);
@@ -2413,12 +2414,12 @@ static Bool amdgpu_setup_kernel_mem(ScreenPtr pScreen)
 
 	if (!info->front_buffer) {
 		int pitch;
-		int hint = 0;
+		int hint = AMDGPU_CREATE_PIXMAP_SCANOUT;
 
 		if (info->shadow_primary)
-			hint = AMDGPU_CREATE_PIXMAP_LINEAR | AMDGPU_CREATE_PIXMAP_GTT;
+			hint |= AMDGPU_CREATE_PIXMAP_LINEAR | AMDGPU_CREATE_PIXMAP_GTT;
 		else if (!info->use_glamor)
-			hint = AMDGPU_CREATE_PIXMAP_LINEAR;
+			hint |= AMDGPU_CREATE_PIXMAP_LINEAR;
 
 		info->front_buffer =
 			amdgpu_alloc_pixmap_bo(pScrn, pScrn->virtualX,

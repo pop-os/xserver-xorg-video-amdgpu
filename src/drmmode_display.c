@@ -557,8 +557,8 @@ drmmode_crtc_scanout_create(xf86CrtcPtr crtc, struct drmmode_scanout *scanout,
 		drmmode_crtc_scanout_destroy(drmmode, scanout);
 	}
 
-	scanout->bo = amdgpu_alloc_pixmap_bo(pScrn, width, height,
-					     pScrn->depth, 0,
+	scanout->bo = amdgpu_alloc_pixmap_bo(pScrn, width, height, pScrn->depth,
+					     AMDGPU_CREATE_PIXMAP_SCANOUT,
 					     pScrn->bitsPerPixel, &pitch);
 	if (!scanout->bo) {
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
@@ -2975,8 +2975,8 @@ static Bool drmmode_xf86crtc_resize(ScrnInfoPtr scrn, int width, int height)
 	int i, pitch, old_width, old_height, old_pitch;
 	int cpp = info->pixel_bytes;
 	PixmapPtr ppix = screen->GetScreenPixmap(screen);
+	int hint = AMDGPU_CREATE_PIXMAP_SCANOUT;
 	void *fb_shadow;
-	int hint = 0;
 
 	if (scrn->virtualX == width && scrn->virtualY == height)
 		return TRUE;
@@ -2990,9 +2990,9 @@ static Bool drmmode_xf86crtc_resize(ScrnInfoPtr scrn, int width, int height)
 	}
 
 	if (info->shadow_primary)
-		hint = AMDGPU_CREATE_PIXMAP_LINEAR | AMDGPU_CREATE_PIXMAP_GTT;
+		hint |= AMDGPU_CREATE_PIXMAP_LINEAR | AMDGPU_CREATE_PIXMAP_GTT;
 	else if (!info->use_glamor)
-		hint = AMDGPU_CREATE_PIXMAP_LINEAR;
+		hint |= AMDGPU_CREATE_PIXMAP_LINEAR;
 
 	xf86DrvMsg(scrn->scrnIndex, X_INFO,
 		   "Allocate new frame buffer %dx%d\n", width, height);
