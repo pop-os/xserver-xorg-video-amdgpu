@@ -96,10 +96,6 @@ enum drmmode_scanout_status {
 	DRMMODE_SCANOUT_VBLANK_FAILED = 1u << 1,
 };
 
-struct drmmode_scanout {
-	PixmapPtr pixmap;
-};
-
 typedef struct {
 	drmmode_ptr drmmode;
 	drmModeCrtcPtr mode_crtc;
@@ -113,8 +109,8 @@ typedef struct {
 	unsigned cursor_id;
 	struct amdgpu_buffer *cursor_buffer[2];
 
-	struct drmmode_scanout rotate;
-	struct drmmode_scanout scanout[2];
+	PixmapPtr rotate;
+	PixmapPtr scanout[2];
 	DamagePtr scanout_damage;
 	Bool ignore_damage;
 	RegionRec scanout_last_region;
@@ -200,9 +196,9 @@ drmmode_crtc_can_flip(xf86CrtcPtr crtc)
 
 	return crtc->enabled &&
 		drmmode_crtc->dpms_mode == DPMSModeOn &&
-		!drmmode_crtc->rotate.pixmap &&
+		!drmmode_crtc->rotate &&
 		(drmmode_crtc->tear_free ||
-		 !drmmode_crtc->scanout[drmmode_crtc->scanout_id].pixmap);
+		 !drmmode_crtc->scanout[drmmode_crtc->scanout_id]);
 }
 
 
@@ -258,10 +254,9 @@ extern void drmmode_copy_fb(ScrnInfoPtr pScrn, drmmode_ptr drmmode);
 extern Bool drmmode_setup_colormap(ScreenPtr pScreen, ScrnInfoPtr pScrn);
 
 extern void drmmode_crtc_scanout_destroy(drmmode_ptr drmmode,
-					 struct drmmode_scanout *scanout);
+					 PixmapPtr *scanout);
 void drmmode_crtc_scanout_free(xf86CrtcPtr crtc);
-PixmapPtr drmmode_crtc_scanout_create(xf86CrtcPtr crtc,
-				      struct drmmode_scanout *scanout,
+PixmapPtr drmmode_crtc_scanout_create(xf86CrtcPtr crtc, PixmapPtr *scanout,
 				      int width, int height);
 
 extern void drmmode_uevent_init(ScrnInfoPtr scrn, drmmode_ptr drmmode);
