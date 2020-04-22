@@ -1231,8 +1231,7 @@ amdgpu_scanout_flip(ScreenPtr pScreen, AMDGPUInfoPtr info,
 			   &drmmode_crtc->scanout_last_region);
 		RegionEmpty(&drmmode_crtc->scanout_last_region);
 		amdgpu_scanout_update(xf86_crtc);
-		drmmode_crtc_scanout_destroy(drmmode_crtc->drmmode,
-					     &drmmode_crtc->scanout[scanout_id]);
+		drmmode_crtc_scanout_destroy(&drmmode_crtc->scanout[scanout_id]);
 		drmmode_crtc->tear_free = FALSE;
 		return;
 	}
@@ -2269,7 +2268,6 @@ void AMDGPULeaveVT_KMS(ScrnInfoPtr pScrn)
 	if (!info->shadow_fb) {
 		AMDGPUEntPtr pAMDGPUEnt = AMDGPUEntPriv(pScrn);
 		xf86CrtcConfigPtr xf86_config = XF86_CRTC_CONFIG_PTR(pScrn);
-		PixmapPtr black_scanout = NULL;
 		xf86CrtcPtr crtc;
 		drmmode_crtc_private_ptr drmmode_crtc;
 		unsigned w = 0, h = 0;
@@ -2295,7 +2293,11 @@ void AMDGPULeaveVT_KMS(ScrnInfoPtr pScrn)
 
 		/* Make all active CRTCs scan out from an all-black framebuffer */
 		if (w > 0 && h > 0) {
-			if (drmmode_crtc_scanout_create(crtc, &black_scanout, w, h)) {
+			PixmapPtr black_scanout =
+				pScreen->CreatePixmap(pScreen, w, h, pScrn->depth,
+						      AMDGPU_CREATE_PIXMAP_SCANOUT);
+
+			if (black_scanout) {
 				struct drmmode_fb *black_fb =
 					amdgpu_pixmap_get_fb(black_scanout);
 
@@ -2327,11 +2329,12 @@ void AMDGPULeaveVT_KMS(ScrnInfoPtr pScrn)
 						}
 					}
 				}
+
+				pScreen->DestroyPixmap(black_scanout);
 			}
 		}
 
 		xf86RotateFreeShadow(pScrn);
-		drmmode_crtc_scanout_destroy(&info->drmmode, &black_scanout);
 
 		/* Unreference FBs of all pixmaps. After this, the only FB remaining
 		 * should be the all-black one being scanned out by active CRTCs

@@ -234,6 +234,17 @@ drmmode_fb_reference_loc(int drm_fd, struct drmmode_fb **old, struct drmmode_fb 
 	drmmode_fb_reference_loc(fd, old, new, __func__, __LINE__)
 
 
+static inline void
+drmmode_crtc_scanout_destroy(PixmapPtr *scanout)
+{
+	if (!*scanout)
+		return;
+
+	(*scanout)->drawable.pScreen->DestroyPixmap(*scanout);
+	(*scanout) = NULL;
+}
+
+
 extern int drmmode_page_flip_target_absolute(AMDGPUEntPtr pAMDGPUEnt,
 					     drmmode_crtc_private_ptr drmmode_crtc,
 					     int fb_id, uint32_t flags,
@@ -253,11 +264,7 @@ extern Bool drmmode_set_desired_modes(ScrnInfoPtr pScrn, drmmode_ptr drmmode,
 extern void drmmode_copy_fb(ScrnInfoPtr pScrn, drmmode_ptr drmmode);
 extern Bool drmmode_setup_colormap(ScreenPtr pScreen, ScrnInfoPtr pScrn);
 
-extern void drmmode_crtc_scanout_destroy(drmmode_ptr drmmode,
-					 PixmapPtr *scanout);
 void drmmode_crtc_scanout_free(xf86CrtcPtr crtc);
-PixmapPtr drmmode_crtc_scanout_create(xf86CrtcPtr crtc, PixmapPtr *scanout,
-				      int width, int height);
 
 extern void drmmode_uevent_init(ScrnInfoPtr scrn, drmmode_ptr drmmode);
 extern void drmmode_uevent_fini(ScrnInfoPtr scrn, drmmode_ptr drmmode);
