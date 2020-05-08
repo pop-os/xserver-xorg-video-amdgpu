@@ -1,5 +1,6 @@
-# IMAGE_TAG is the tag of the docker image used for the build jobs. If the
-# image doesn't exist yet, the docker-image stage generates it.
+# FDO_DISTRIBUTION_TAG is the tag of the docker image used for the build
+# jobs. If the image doesn't exist yet, the docker-image stage generates it
+# or copies it from upstream (this is all handled by the templates).
 #
 # In order to generate a new image, one should generally change the tag.
 # While removing the image from the registry would also work, that's not
@@ -8,36 +9,35 @@
 # gcc/clang or other packages, which might break the build with older commits
 # using the same tag.
 #
-# After merging a change resulting in generating a new image to the main
-# repository, it's recommended to remove the image from the source repository's
-# container registry, so that the image from the main repository's registry
-# will be used there as well.
 variables:
-  UPSTREAM_REPO: xorg/driver/xf86-video-amdgpu
-  DEBIAN_VERSION: testing-slim
-  DEBIAN_EXEC: 'bash .gitlab-ci/debian-install.sh'
-  DEBIAN_TAG: "2019-08-02"
-  IMAGE_LOCAL: "$CI_REGISTRY_IMAGE/debian/$DEBIAN_VERSION:$DEBIAN_TAG"
+  FDO_UPSTREAM_REPO: xorg/driver/xf86-video-amdgpu
 
 include:
-  - project: 'wayland/ci-templates'
-    ref: adfcd8c318d3398d0547960e45daa34d3b48bce6
+  - project: 'freedesktop/ci-templates'
+    ref: 59de540b620c45739871d1a073d76d5521989d11
     file: '/templates/debian.yml'
 
 stages:
   - docker-image
   - build
 
+.debian-testing:
+  variables:
+    FDO_DISTRIBUTION_VERSION: testing-slim
+    FDO_DISTRIBUTION_EXEC: 'bash .gitlab-ci/debian-install.sh'
+    FDO_DISTRIBUTION_TAG: "2019-08-02"
 
-debian-testing:
-  extends: .debian@container-ifnot-exists
+container-build:
+  extends:
+    - .debian-testing
+    - .fdo.container-build@debian
   stage: docker-image
-
-
-image: $IMAGE_LOCAL
 
 # The default build instructions
 .default_build:
+  extends:
+    - .debian-testing
+    - .fdo.distribution-image@debian
   stage: build
   script:
   - ./autogen.sh
