@@ -349,7 +349,7 @@ amdgpu_glamor_set_pixmap_bo(DrawablePtr drawable, PixmapPtr pixmap)
 
 
 static Bool
-amdgpu_glamor_share_pixmap_backing(PixmapPtr pixmap, ScreenPtr slave,
+amdgpu_glamor_share_pixmap_backing(PixmapPtr pixmap, ScreenPtr secondary,
 				   void **handle_p)
 {
 	ScreenPtr screen = pixmap->drawable.pScreen;
