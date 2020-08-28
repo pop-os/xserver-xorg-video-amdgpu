@@ -209,7 +209,8 @@ amdgpu_glamor_create_pixmap(ScreenPtr screen, int w, int h, int depth,
 	if (!format)
 		return NULL;
 
-	if (!AMDGPU_CREATE_PIXMAP_SHARED(usage)) {
+	if (!(usage & AMDGPU_CREATE_PIXMAP_SCANOUT) &&
+	    !AMDGPU_CREATE_PIXMAP_SHARED(usage)) {
 		if (info->shadow_primary) {
 			if (usage != CREATE_PIXMAP_USAGE_BACKING_PIXMAP)
 				return fbCreatePixmap(screen, w, h, depth, usage);
