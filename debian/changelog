@@ -1,3 +1,11 @@
+xserver-xorg-video-amdgpu (19.1.0-2) unstable; urgency=medium
+
+  * Team upload.
+  * Cherry-pick upstream build fix for GCC 10 (closes: #957997).
+    Thanks, Matthias Klose!
+
+ -- Julien Cristau <jcristau@debian.org>  Thu, 17 Sep 2020 15:25:15 +0200
+
 xserver-xorg-video-amdgpu (19.1.0-1) unstable; urgency=medium
 
   * New upstream release.
