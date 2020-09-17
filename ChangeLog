@@ -1,3 +1,363 @@
+commit b467d2569a003da05ad222b0dc095bee5eec450a
+Author: Michel Dänzer <mdaenzer@redhat.com>
+Date:   Fri Oct 11 17:10:10 2019 +0200
+
+    Bump version for the 19.1.0 release
+
+commit a1b7263277c033e109629829c370c0e95978e061
+Author: Michel Dänzer <mdaenzer@redhat.com>
+Date:   Thu Sep 26 15:56:59 2019 +0200
+
+    Don't unreference FBs of pixmaps from different screens in LeaveVT
+    
+    FindClientResourcesByType finds pixmaps from all screens, but trying to
+    process ones from other screens here makes no sense and likely results
+    in a crash or memory corruption.
+    
+    Fixes: c16ff42f927d ("Make all active CRTCs scan out an all-black
+                          framebuffer in LeaveVT")
+    (Ported from radeon commit 2faaecc69b127248718e759c6c98c84d56dd1b6b)
+
+commit 5b8bc9fc505c551dcd9b0ed5ab835a49fa4f9fda
+Author: Michel Dänzer <mdaenzer@redhat.com>
+Date:   Wed Sep 18 12:55:45 2019 +0200
+
+    Don't set up black scanout buffer if LeaveVT is called from CloseScreen
+    
+    Avoids a crash described in
+    https://gitlab.freedesktop.org/xorg/driver/xf86-video-amdgpu/merge_requests/43#note_223718
+    
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+
+commit e6fce59a071220967fcd4e2c9e4a262c72870761
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Wed Jul 24 16:05:05 2019 +0200
+
+    present: Don't check pixmap pitch in check_flip with non-DC >= 3.34
+    
+    The current non-DC kernel driver also handles flipping between different
+    pitches correctly.
+    
+    Reviewed-by: Nicholas Kazlauskas <nicholas.kazlauskas@amd.com>
+
+commit 5bb2580b266468f87843b5585ae64e056b63bb88
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Wed Jul 24 15:55:19 2019 +0200
+
+    present: Don't check pixmap pitch in check_flip with current DC
+    
+    Current DC handles flipping between different pitches correctly.
+    
+    Reviewed-by: Nicholas Kazlauskas <nicholas.kazlauskas@amd.com>
+
+commit ac66086613cbd0974b421cd5eda872adc15242ed
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Wed Jul 24 15:45:21 2019 +0200
+
+    present: Also check pixmap pitch in check_flip with current xserver
+    
+    The corresponding check in the xserver Present code was removed again,
+    because flipping between different pitches can work in some cases.
+    
+    Reviewed-by: Nicholas Kazlauskas <nicholas.kazlauskas@amd.com>
+
+commit 98f172eb2d2353e19edd8167f22215ce596811f8
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Mon Jul 29 18:54:24 2019 +0200
+
+    gitlab-ci: Use templates from wayland/ci-templates
+    
+    These are already used by xserver, Mesa and some other projects.
+    
+    Current Debian testing brings e.g. GCC 8.3.0 and clang 7.0.1.
+
+commit 87f41ace4920fd2069794211683659eb25b025a6
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Fri Jul 5 12:43:53 2019 +0200
+
+    Don't disable page flipping completely with SW cursor
+    
+    Even with SW cursor, page flipping can be used while no X cursor is
+    visible.
+    
+    Occurred to me in the context of xorg/xserver#828.
+
+commit 7d3fef72e0c871e1677e9e544f4cae5e238b5c52
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Thu May 9 17:39:49 2019 +0200
+
+    present: Check that we can get a KMS FB for flipping
+    
+    This can legitimately fail if the pixmap's storage is shared from
+    another device, e.g. when using PRIME render offloading.
+
+commit ea19a5207054bb159fc7fb6d88e0ceb10c3da010
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Thu Jun 6 11:02:15 2019 +0200
+
+    Remove dri2_drawable_crtc parameter consider_disabled
+    
+    All callers were passing TRUE.
+    
+    Reviewed-and-tested-by: Flora Cui <flora.cui@amd.com>
+
+commit 3109f088fdbd89c2ee8078625d4f073852492656
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Thu Jun 6 11:22:09 2019 +0200
+
+    dri2: Re-use previous CRTC when possible if pick_best_crtc returns NULL
+    
+    This way, the MSC will continue ticking at the rate of (the last mode
+    which was enabled for) that CRTC, instead of the client running
+    unthrottled.
+    
+    Reviewed-and-tested-by: Flora Cui <flora.cui@amd.com>
+
+commit fb06fb814700a47464abd756e1111dcc76d0d776
+Author: Flora Cui <flora.cui@amd.com>
+Date:   Wed May 29 14:18:50 2019 +0800
+
+    dri2: reply to client for WaitMSC request in any case
+    
+    otherwise client would wait for reply forever and desktop appears hang.
+    
+    Signed-off-by: Flora Cui <flora.cui@amd.com>
+    Acked-by: Feifei Xu <Feifei.Xu@amd.com>
+    Reviewed-by: Michel Dänzer <michel.daenzer@amd.com>
+
+commit 4b17533fcb30842caf0035ba593b7d986520cc85
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Tue Apr 30 17:50:15 2019 +0200
+
+    dri3: Always flush glamor before sharing pixmap storage with clients
+    
+    Even if glamor_gbm_bo_from_pixmap / glamor_fd_from_pixmap themselves
+    don't trigger any drawing, there could already be unflushed drawing to
+    the pixmap whose storage we share with a client.
+
+commit bf61e6d7ac1a5754b1026d7f80acf25ef622c491
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Thu Apr 18 19:21:40 2019 +0200
+
+    Retry get_fb_ptr in get_fb
+    
+    If get_fb_ptr returns NULL, try again after pixmap_get_handle, it should
+    work then.
+    
+    Fixes spurious Present page flipping failures using "normal" pixmaps
+    which aren't shared with direct rendering clients, e.g. with a
+    compositor using the RENDER extension.
+    
+    Bugzilla: https://bugs.freedesktop.org/110417
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+
+commit bd4ffd4ebbdf1c43ab9e1ef9ba8b812fd2dde4a4
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Tue Mar 19 18:44:31 2019 +0100
+
+    Bump version for the 19.0.1 release
+
+commit 6ee857726166f495abcd68e4ff60e3a09593d079
+Author: Dave Airlie <airlied@redhat.com>
+Date:   Mon Mar 23 11:33:23 2015 +1000
+
+    modesetting: add tile property support
+    
+    This adds tiling support to the driver, it retrieves the tile info from
+    the kernel and translates it into the server format and exposes the
+    property.
+    
+    (Ported from xserver commits 8fb8bbb3062f1a06621ab7030a9e89d5e8367b35
+     and 6abdb54a11dac4e8854ff94ecdcb90a14321ab31)
+    Reviewed-by: Alex Deucher <alexander.deucher@amd.com>
+
+commit 9534bf3bb33d14cd3a5af08e36ef42b309647fc7
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Wed Mar 6 12:05:14 2019 +0100
+
+    Bump version for the 19.0.0 release
+
+commit a2b32e72fdaff3007a79b84929997d8176c2d512
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Fri Mar 1 17:42:08 2019 +0100
+
+    present: Don't check tiling parameters with DC & DRM minor version >= 31
+    
+    Current DC handles any changes of tiling parameters for flips.
+    
+    v2:
+    * Just check all tiling bits if DRM minor < 31 or DC is disabled.
+    
+    Reviewed-by: Nicholas Kazlauskas <nicholas.kazlauskas@amd.com>
+
+commit 2798244be78df3ef3a7841597577506bfbe50156
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Fri Mar 1 17:47:24 2019 +0100
+
+    Make drmmode_cm_enabled an inline function
+    
+    So that it can be used outside of drmmode_display.c as well.
+    
+    Reviewed-by: Nicholas Kazlauskas <nicholas.kazlauskas@amd.com>
+
+commit 72653455e4f652ca6c7c290c7f1e8a889b77f5ce
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Fri Mar 1 17:35:48 2019 +0100
+
+    Revert "Remove set but unused amdgpu_dri2::pKernelDRMVersion"
+    
+    This reverts commit 720a61000aeb139005bd8125908cec66a6e69554.
+    
+    We're going to make use of it now.
+    
+    Reviewed-by: Nicholas Kazlauskas <nicholas.kazlauskas@amd.com>
+
+commit 28cd209ebf20561e65d14fa2e8bbfaedf6965948
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Wed Feb 27 17:35:26 2019 +0100
+
+    Revert "gitlab-ci: Only run docker-image stage if relevant source files change"
+    
+    This reverts commit 9c23076b9e81c36ac2408c491f9b2d546829ee8e.
+    
+    Some scenarios have come to light where this failed to ensure the docker
+    image exists:
+    
+    * If the master branch of a forked repository is used for an MR which
+      doesn't modify .gitlab-ci.yml, the docker-image job may not run.
+    * If the docker-image job of the first pipeline in a forked repository
+      is cancelled or fails for any reason, and .gitlab-ci.yml isn't
+      modified for the next pipeline run.
+
+commit 09be74a3d1dd9604336d9a27f98d132b262dcbaf
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Thu Feb 28 17:31:55 2019 +0100
+
+    dri2: Call drm_queue_handle_deferred in dri2_deferred_event
+    
+    drm_queue_handler just puts the event on the signalled list; without
+    calling drm_queue_handle_deferred, actual processing of the event may be
+    delayed indefinitely, e.g. until another event arrives from the kernel.
+    
+    This could result in DRI2 clients hanging during DPMS off.
+    
+    Fixes: 739181c8d3334 "Add amdgpu_drm_handle_event wrapper for
+                          drmHandleEvent"
+    Reviewed-by: Aaron Liu <aaron.liu@amd.com>
+    Tested-by: Aaron Liu <aaron.liu@amd.com>
+
+commit a636f42b496b0604ca00a144690ece61d1a88a27
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Wed Feb 27 18:43:27 2019 +0100
+
+    present: Check that flip and screen pixmap pitches match
+    
+    If they don't, flipping will result in corrupted display.
+    
+    Test case:
+    
+    * Run Xorg at 1920x1080 with no window manager
+    * glxgears -geometry 2048x1080
+    
+    The Present extension code in xserver 1.21 will check for this.
+    
+    Tested-by: Jax Lin <jax.lin@amd.com>
+
+commit bd090f389f19f1f4a3f662ffdd891345a3899539
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Tue Feb 12 17:57:17 2019 +0100
+
+    Call amdgpu_present_set_screen_vrr from amdgpu_vrr_property_update
+    
+    If the window is currently flipping.
+    
+    This might make a difference when the property gets disabled: Variable
+    refresh will now be disabled immediately in that case, instead of only
+    when the window can no longer use page flipping at all.
+    
+    Reviewed-by: Nicholas Kazlauskas <nicholas.kazlauskas@amd.com>
+
+commit d9be5d712d469595e1e610f7294bc670ca3b1985
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Tue Feb 12 12:26:25 2019 +0100
+
+    Make use of property request wrappers for VRR property
+    
+    Instead of scanning for PropertyNotify events. Reasons:
+    
+    * Works even if no client listens to PropertyNotify events for the
+      window.
+    * No overhead on delivery of unrelated events, and no overhead at all
+      if Option "VariableRefresh" is disabled.
+    
+    v2:
+    * Use shorter variable name amdgpu_vrr_atom.
+    * Call MakeAtom regardless of info->instance_id, for robustness vs VRR
+      being enabled in some but not all AMDGPU screens.
+    
+    Reviewed-by: Nicholas Kazlauskas <nicholas.kazlauskas@amd.com>
+
+commit ef8fbe33b7d97f7fb5518db9c0e4d2dcbf2fab6f
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Thu Jan 17 18:41:11 2019 +0100
+
+    Wrap change/delete window property request handlers
+    
+    Preparation for the following change.
+    
+    v2:
+    * Add comments explaining what the wrappers are wrapping.
+    * Use global amdgpu_property_vectors_wrapped to keep track of whether
+      the vectors need to be (un)wrapped, for robustness against VRR being
+      enabled in some but not all AMDGPU screens.
+    
+    Reviewed-by: Nicholas Kazlauskas <nicholas.kazlauskas@amd.com>
+
+commit 09a45ff8fe3ac07bafa3a0822b1598c41f9ca200
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Tue Feb 12 13:01:04 2019 +0100
+
+    Don't enable the VRR support code for GPU screens
+    
+    Windows aren't associated with GPU screens, and amdgpu_present_flip is
+    never called for them, so VRR can never actually be enabled for them.
+    
+    Reviewed-by: Nicholas Kazlauskas <nicholas.kazlauskas@amd.com>
+
+commit 2a3d00dc7ed2b4fca698e2d699e1b94da6d0ddb8
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Tue Feb 12 18:12:23 2019 +0100
+
+    Don't register a window private if VRR is disabled
+    
+    It's not used in that case.
+    
+    Reviewed-by: Nicholas Kazlauskas <nicholas.kazlauskas@amd.com>
+
+commit 5f91be77e059d0c4a4268ec10cbd9aa1052f53eb
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Mon Feb 11 18:32:07 2019 +0100
+
+    gitlab-ci: Don't rely on $CI_PROJECT_NAME
+    
+    The name of a forked repository can be changed later, in which case this
+    would fail to refer to the main repository.
+    
+    Pointed out by Eric Engestrom in
+    https://gitlab.freedesktop.org/mesa/mesa/merge_requests/224 .
+
+commit 9c23076b9e81c36ac2408c491f9b2d546829ee8e
+Author: Michel Dänzer <michel.daenzer@amd.com>
+Date:   Thu Feb 7 17:35:13 2019 +0100
+
+    gitlab-ci: Only run docker-image stage if relevant source files change
+    
+    Otherwise there's normally no need to run it. It will also run when a
+    new branch is created, which ensures that the docker image always exists
+    (e.g. in a newly forked repository).
+    
+    Inspired by https://gitlab.freedesktop.org/mesa/mesa/merge_requests/143
+
 commit 9045fb310f88780e250e60b80431ca153330e61b
 Author: Michel Dänzer <michel.daenzer@amd.com>
 Date:   Thu Jan 24 18:31:40 2019 +0100
@@ -5876,7 +6236,7 @@ Date:   Tue Jun 2 17:04:21 2015 +0900
     
     Must be enabled with
     
-    	Option	"DRI3"
+            Option  "DRI3"
     
     in xorg.conf.
     
