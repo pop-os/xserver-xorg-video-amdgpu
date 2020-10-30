@@ -513,9 +513,10 @@ drmmode_crtc_scanout_create(xf86CrtcPtr crtc, PixmapPtr *scanout,
 		ErrorF("failed to create CRTC scanout FB\n");
 error:		
 		drmmode_crtc_scanout_destroy(scanout);
+		return FALSE;
 	}
 
-	return FALSE;
+	return TRUE;
 }
 
 static void
