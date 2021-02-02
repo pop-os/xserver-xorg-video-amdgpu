@@ -50,7 +50,6 @@
 #include "xf86.h"
 
 #include "xf86drmMode.h"
-#include "dri.h"
 
 #if defined(__FreeBSD__) || defined(__FreeBSD_kernel__)
 #include <xf86_OSproc.h>

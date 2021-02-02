@@ -47,8 +47,6 @@
 #include "amdgpu_glamor.h"
 #include "amdgpu_pixmap.h"
 
-#include <dri.h>
-
 /* DPMS */
 #ifdef HAVE_XEXTPROTO_71
 #include <X11/extensions/dpmsconst.h>
