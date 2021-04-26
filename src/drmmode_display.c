@@ -40,7 +40,7 @@
 #include "mipointrst.h"
 #include "xf86cmap.h"
 #include "xf86Priv.h"
-#include "sarea.h"
+#include <xf86drm.h>
 
 #include "drmmode_display.h"
 #include "amdgpu_bo_helper.h"
