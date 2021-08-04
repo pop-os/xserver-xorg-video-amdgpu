@@ -1,3 +1,9 @@
+xserver-xorg-video-amdgpu (21.0.0-1) UNRELEASED; urgency=medium
+
+  * New upstream release.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Wed, 04 Aug 2021 14:00:10 +0300
+
 xserver-xorg-video-amdgpu (19.1.0-2) unstable; urgency=medium
 
   * Team upload.
