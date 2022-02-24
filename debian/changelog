@@ -1,9 +1,9 @@
-xserver-xorg-video-amdgpu (22.0.0-1) UNRELEASED; urgency=medium
+xserver-xorg-video-amdgpu (22.0.0-1) unstable; urgency=medium
 
   * New upstream release.
   * Drop upstreamed patch.
 
- -- Timo Aaltonen <tjaalton@debian.org>  Wed, 23 Feb 2022 20:13:11 +0200
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 24 Feb 2022 07:52:20 +0200
 
 xserver-xorg-video-amdgpu (21.0.0-2) unstable; urgency=medium
 
