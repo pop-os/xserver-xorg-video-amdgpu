@@ -1,3 +1,9 @@
+xserver-xorg-video-amdgpu (22.0.0-1ubuntu0.1pop1) jammy; urgency=medium
+
+  * Pop!_OS Release
+
+ -- Brock Szuszczewicz <brock@szu.email>  Thu, 23 Feb 2023 14:05:22 -0700
+
 xserver-xorg-video-amdgpu (22.0.0-1) unstable; urgency=medium
 
   * New upstream release.
