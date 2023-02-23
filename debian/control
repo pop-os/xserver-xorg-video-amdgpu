@@ -13,7 +13,11 @@ Build-Depends:
  pkg-config,
  x11proto-dev,
  xserver-xorg-dev (>= 2:1.16),
- xutils-dev (>= 1:7.5+4)
+ xutils-dev (>= 1:7.5+4),
+ libx11-6,
+ libx11-dev,
+ libx11-xcb-dev,
+ x11proto-dev,
 Standards-Version: 4.2.1
 Vcs-Git: https://salsa.debian.org/xorg-team/driver/xserver-xorg-video-amdgpu.git
 Vcs-Browser: https://salsa.debian.org/xorg-team/driver/xserver-xorg-video-amdgpu.git
